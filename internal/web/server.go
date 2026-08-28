@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"embed"
@@ -9,9 +10,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -152,10 +155,22 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 }
 
 func decodeJSON(r *http.Request, target any) error {
-	decoder := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 16*1024*1024))
+	const maxBody = 16 * 1024 * 1024
+	data, err := io.ReadAll(io.LimitReader(r.Body, maxBody+1))
+	if err != nil {
+		return fmt.Errorf("读取请求失败: %w", err)
+	}
+	if len(data) > maxBody {
+		return errors.New("请求内容过大")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
 	if err := decoder.Decode(target); err != nil {
 		return fmt.Errorf("请求 JSON 格式不正确: %w", err)
+	}
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		return errors.New("请求 JSON 包含多余内容")
 	}
 	return nil
 }
@@ -610,9 +625,17 @@ func (s *Server) mcpConfigs(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	command := map[string]any{"command": executable, "args": []string{"--mcp"}}
+	commandName := executable
+	args := []string{"--mcp"}
+	if strings.Contains(filepath.Clean(executable), string(filepath.Separator)+"go-build") {
+		if cwd, cwdErr := os.Getwd(); cwdErr == nil {
+			commandName = "go"
+			args = []string{"-C", cwd, "run", ".", "--mcp"}
+		}
+	}
+	command := map[string]any{"command": commandName, "args": args}
 	url := fmt.Sprintf("http://127.0.0.1:%d/mcp/", port)
-	writeJSON(w, http.StatusOK, map[string]any{"executable": executable + " --mcp", "port": port, "claude": map[string]any{"mcpServers": map[string]any{"ssh-mcp": command}}, "cursor": map[string]any{"mcpServers": map[string]any{"ssh-mcp": command}}, "vscode": map[string]any{"servers": map[string]any{"ssh-mcp": map[string]any{"type": "stdio", "command": executable, "args": []string{"--mcp"}}}}, "http": map[string]any{"mcpServers": map[string]any{"ssh-mcp": map[string]any{"type": "streamable-http", "url": url}}}})
+	writeJSON(w, http.StatusOK, map[string]any{"executable": commandName + " " + strings.Join(args, " "), "port": port, "claude": map[string]any{"mcpServers": map[string]any{"ssh-mcp": command}}, "cursor": map[string]any{"mcpServers": map[string]any{"ssh-mcp": command}}, "vscode": map[string]any{"servers": map[string]any{"ssh-mcp": map[string]any{"type": "stdio", "command": commandName, "args": args}}}, "http": map[string]any{"mcpServers": map[string]any{"ssh-mcp": map[string]any{"type": "streamable-http", "url": url}}}})
 	return nil
 }
 

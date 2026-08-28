@@ -657,7 +657,16 @@ func (m *Manager) Stat(server *config.Server, path string) (map[string]any, erro
 	if err != nil {
 		return nil, &Error{Message: "stat 失败: " + err.Error()}
 	}
-	return map[string]any{"path": path, "size": info.Size(), "mtime": info.ModTime().Unix(), "mode": "0o" + strconv.FormatUint(uint64(info.Mode()), 8)}, nil
+	mode := uint32(info.Mode().Perm())
+	switch {
+	case info.Mode()&os.ModeSymlink != 0:
+		mode |= 0o120000
+	case info.IsDir():
+		mode |= 0o040000
+	default:
+		mode |= 0o100000
+	}
+	return map[string]any{"path": path, "size": info.Size(), "mtime": info.ModTime().Unix(), "mode": "0o" + strconv.FormatUint(uint64(mode), 8)}, nil
 }
 
 func endpointAddress(host string, port int) string { return net.JoinHostPort(host, strconv.Itoa(port)) }

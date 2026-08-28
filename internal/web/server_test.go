@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"context"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/ssh-mcp/ssh-mcp-go/internal/config"
 	"github.com/ssh-mcp/ssh-mcp-go/internal/mcpserver"
 )
@@ -47,6 +49,29 @@ func TestAuthAndServerFlow(t *testing.T) {
 	}
 	requestJSON(t, client, http.MethodPost, httpServer.URL+"/api/auth/lock", map[string]any{}, http.StatusOK)
 	requestJSON(t, client, http.MethodGet, httpServer.URL+"/api/servers", nil, http.StatusUnauthorized)
+}
+
+func TestStreamableHTTPMCP(t *testing.T) {
+	t.Setenv("LOCALAPPDATA", t.TempDir())
+	app, err := NewServer(nil, mcpserver.NewRuntime())
+	if err != nil {
+		t.Fatal(err)
+	}
+	httpServer := httptest.NewServer(app.Handler())
+	defer httpServer.Close()
+	client := mcp.NewClient(&mcp.Implementation{Name: "web-test", Version: "1"}, nil)
+	session, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{Endpoint: httpServer.URL + "/mcp/", MaxRetries: -1}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	tools, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tools.Tools) != 16 {
+		t.Fatalf("tool count = %d", len(tools.Tools))
+	}
 }
 
 func requestJSON(t *testing.T, client *http.Client, method, url string, body any, status int) map[string]any {

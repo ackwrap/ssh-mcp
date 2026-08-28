@@ -2,6 +2,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -199,7 +200,11 @@ func NewServer(runtime *Runtime) *mcp.Server {
 			if err != nil {
 				var commandErr *sshclient.CommandError
 				if errors.As(err, &commandErr) {
-					return nil, nil, fmt.Errorf("命令执行失败（退出码 %v）:\nstdout: %s\nstderr: %s", commandErr.ExitCode, truncate(commandErr.Stdout, 2000), truncate(commandErr.Stderr, 2000))
+					exitCode := "未知"
+					if commandErr.ExitCode != nil {
+						exitCode = fmt.Sprint(*commandErr.ExitCode)
+					}
+					return nil, nil, fmt.Errorf("命令执行失败（退出码 %s）:\nstdout: %s\nstderr: %s", exitCode, truncate(commandErr.Stdout, 2000), truncate(commandErr.Stderr, 2000))
 				}
 				return nil, nil, err
 			}
@@ -412,8 +417,8 @@ func truncate(value string, max int) string {
 }
 
 func structMap(value any) map[string]any {
-	data, _ := jsonMarshal(value)
+	data, _ := json.Marshal(value)
 	result := map[string]any{}
-	_ = jsonUnmarshal(data, &result)
+	_ = json.Unmarshal(data, &result)
 	return result
 }

@@ -1,11 +1,13 @@
 package sshclient
 
 import (
+	"bufio"
 	"crypto/rand"
 	"crypto/rsa"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -68,6 +70,38 @@ func TestExecAndSFTP(t *testing.T) {
 	}
 }
 
+func TestJumpChainAndProxies(t *testing.T) {
+	targetPort, stopTarget := startTestSSHServer(t)
+	defer stopTarget()
+	jumpPort, stopJump := startTestSSHServer(t)
+	defer stopJump()
+	password := "test-password"
+	jumpName := "jump"
+	baseEndpoint := config.Endpoint{ID: "target", Name: "target", Host: "127.0.0.1", Port: targetPort, Username: "tester", Auth: config.AuthSpec{Type: "password", Password: &password}}
+	opened := &config.OpenStore{Config: config.AppConfig{Version: 1, Servers: []config.Server{{Endpoint: baseEndpoint}}, JumpHosts: []config.JumpHost{{Endpoint: config.Endpoint{ID: "jump", Name: jumpName, Host: "127.0.0.1", Port: jumpPort, Username: "tester", Auth: config.AuthSpec{Type: "password", Password: &password}}}}}}
+	opened.Config.Servers[0].JumpVia = &jumpName
+	manager := NewManager(opened)
+	server, _ := opened.GetServer("target")
+	result, err := manager.Exec(server, "echo via-jump", 5*time.Second, "", nil)
+	manager.CloseAll()
+	if err != nil || !strings.Contains(result.Stdout, "via-jump") {
+		t.Fatalf("jump exec stdout=%q err=%v", result.Stdout, err)
+	}
+
+	for _, proxyType := range []string{"socks5", "http"} {
+		proxyPort, stopProxy := startTestProxy(t, proxyType)
+		opened.Config.Servers[0].JumpVia = nil
+		opened.Config.Servers[0].Proxy = &config.ProxySpec{Type: proxyType, Host: "127.0.0.1", Port: proxyPort}
+		manager = NewManager(opened)
+		result, err = manager.Exec(&opened.Config.Servers[0], "echo via-"+proxyType, 5*time.Second, "", nil)
+		manager.CloseAll()
+		stopProxy()
+		if err != nil || !strings.Contains(result.Stdout, "via-"+proxyType) {
+			t.Fatalf("%s exec stdout=%q err=%v", proxyType, result.Stdout, err)
+		}
+	}
+}
+
 func startTestSSHServer(t *testing.T) (int, func()) {
 	t.Helper()
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -113,6 +147,10 @@ func serveTestSSH(raw net.Conn, serverConfig *ssh.ServerConfig) {
 	defer connection.Close()
 	go ssh.DiscardRequests(requests)
 	for channelRequest := range channels {
+		if channelRequest.ChannelType() == "direct-tcpip" {
+			go serveTestTunnel(channelRequest)
+			continue
+		}
 		if channelRequest.ChannelType() != "session" {
 			_ = channelRequest.Reject(ssh.UnknownChannelType, "unsupported")
 			continue
@@ -123,6 +161,31 @@ func serveTestSSH(raw net.Conn, serverConfig *ssh.ServerConfig) {
 		}
 		go serveTestSession(channel, requests)
 	}
+}
+
+func serveTestTunnel(request ssh.NewChannel) {
+	var payload struct {
+		DestHost   string
+		DestPort   uint32
+		OriginHost string
+		OriginPort uint32
+	}
+	if err := ssh.Unmarshal(request.ExtraData(), &payload); err != nil {
+		_ = request.Reject(ssh.ConnectionFailed, "bad target")
+		return
+	}
+	target, err := net.Dial("tcp", net.JoinHostPort(payload.DestHost, fmt.Sprint(payload.DestPort)))
+	if err != nil {
+		_ = request.Reject(ssh.ConnectionFailed, err.Error())
+		return
+	}
+	channel, requests, err := request.Accept()
+	if err != nil {
+		target.Close()
+		return
+	}
+	go ssh.DiscardRequests(requests)
+	go relayConnections(channel, target)
 }
 
 func serveTestSession(channel ssh.Channel, requests <-chan *ssh.Request) {
@@ -160,4 +223,117 @@ func serveTestSession(channel ssh.Channel, requests <-chan *ssh.Request) {
 			_ = request.Reply(false, nil)
 		}
 	}
+}
+
+func startTestProxy(t *testing.T, proxyType string) (int, func()) {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				if proxyType == "socks5" {
+					serveTestSOCKS5(conn)
+				} else {
+					serveTestHTTPProxy(conn)
+				}
+			}()
+		}
+	}()
+	return listener.Addr().(*net.TCPAddr).Port, func() { _ = listener.Close() }
+}
+
+func serveTestSOCKS5(conn net.Conn) {
+	defer conn.Close()
+	header := make([]byte, 2)
+	if _, err := io.ReadFull(conn, header); err != nil {
+		return
+	}
+	methods := make([]byte, int(header[1]))
+	if _, err := io.ReadFull(conn, methods); err != nil {
+		return
+	}
+	if _, err := conn.Write([]byte{5, 0}); err != nil {
+		return
+	}
+	request := make([]byte, 4)
+	if _, err := io.ReadFull(conn, request); err != nil {
+		return
+	}
+	var host string
+	switch request[3] {
+	case 1:
+		address := make([]byte, 4)
+		if _, err := io.ReadFull(conn, address); err != nil {
+			return
+		}
+		host = net.IP(address).String()
+	case 3:
+		length := make([]byte, 1)
+		if _, err := io.ReadFull(conn, length); err != nil {
+			return
+		}
+		address := make([]byte, int(length[0]))
+		if _, err := io.ReadFull(conn, address); err != nil {
+			return
+		}
+		host = string(address)
+	case 4:
+		address := make([]byte, 16)
+		if _, err := io.ReadFull(conn, address); err != nil {
+			return
+		}
+		host = net.IP(address).String()
+	default:
+		return
+	}
+	portBytes := make([]byte, 2)
+	if _, err := io.ReadFull(conn, portBytes); err != nil {
+		return
+	}
+	port := int(portBytes[0])<<8 | int(portBytes[1])
+	target, err := net.Dial("tcp", net.JoinHostPort(host, fmt.Sprint(port)))
+	if err != nil {
+		_, _ = conn.Write([]byte{5, 5, 0, 1, 0, 0, 0, 0, 0, 0})
+		return
+	}
+	if _, err := conn.Write([]byte{5, 0, 0, 1, 127, 0, 0, 1, 0, 0}); err != nil {
+		target.Close()
+		return
+	}
+	relayConnections(conn, target)
+}
+
+func serveTestHTTPProxy(conn net.Conn) {
+	defer conn.Close()
+	reader := bufio.NewReader(conn)
+	request, err := http.ReadRequest(reader)
+	if err != nil || request.Method != http.MethodConnect {
+		return
+	}
+	target, err := net.Dial("tcp", request.Host)
+	if err != nil {
+		_, _ = io.WriteString(conn, "HTTP/1.1 502 Bad Gateway\r\n\r\n")
+		return
+	}
+	if _, err := io.WriteString(conn, "HTTP/1.1 200 Connection Established\r\n\r\n"); err != nil {
+		target.Close()
+		return
+	}
+	relayConnections(conn, target)
+}
+
+func relayConnections(left, right io.ReadWriteCloser) {
+	defer left.Close()
+	defer right.Close()
+	done := make(chan struct{}, 2)
+	go func() { _, _ = io.Copy(left, right); done <- struct{}{} }()
+	go func() { _, _ = io.Copy(right, left); done <- struct{}{} }()
+	<-done
 }

@@ -4,6 +4,8 @@
 
 当前版本：**0.1.0**。
 
+完整使用说明见 [`USAGE.md`](USAGE.md)，项目维护约定见 [`AGETNS.md`](AGETNS.md)。
+
 ## 已迁移功能
 
 - Windows 托盘、单实例、打开/重启 WebUI、开机自启
@@ -49,13 +51,20 @@ Windows 下直接运行 `go run .` 启动托盘；`--open` 会在服务就绪后
 .\build.ps1
 ```
 
-输出：
+默认同时生成单文件应用和安装包：
 
 ```text
 dist\ssh-mcp.exe
+dist\installer\SSH-MCP-Setup-0.1.0.exe
 ```
 
-构建产物为单文件 Windows GUI 程序，前端资源已通过 `embed` 打包。`--mcp` 模式仍通过继承的标准输入输出管道工作。
+只构建应用、不编译安装包：
+
+```powershell
+.\build.ps1 -SkipInstaller
+```
+
+安装器依赖 Inno Setup 6；缺少时构建脚本会尝试通过 `winget` 安装。开始菜单、桌面快捷方式和安装完成页都使用 `ssh-mcp.exe --open`，启动托盘后直接打开 WebUI。构建产物为单文件 Windows GUI 程序，前端资源已通过 `embed` 打包；`--mcp` 模式仍通过继承的标准输入输出管道工作。
 
 ## 参数
 

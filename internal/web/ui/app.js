@@ -4,7 +4,13 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
 const MASK = "******";
-const state = { configured: false, authenticated: false, configs: null };
+const state = {
+  configured: false,
+  authenticated: false,
+  integrationTools: [],
+  integrationResults: [],
+  integrationsLoading: false,
+};
 
 // ---------------- 基础工具 ----------------
 async function api(path, opts = {}) {
@@ -132,7 +138,7 @@ function route() {
   if (el) el.classList.remove("hidden");
   if (view === "servers") loadServers();
   if (view === "jumps") loadJumps();
-  if (view === "docs") loadDocs();
+  if (view === "integrations") loadIntegrations();
 }
 window.addEventListener("hashchange", route);
 
@@ -480,69 +486,6 @@ $("#btn-import").addEventListener("click", async () => {
     $("#import-pass").value = "";
   } catch (ex) { toast(ex.message, "err"); }
 });
-
-// ---------------- 对接文档 ----------------
-const DOC_CLIENTS = [
-  { key: "claude", name: "Claude Desktop", steps: [
-    "打开 Claude Desktop → 设置（齿轮）→ 开发者",
-    "点击「编辑配置」，打开 claude_desktop_config.json",
-    "粘贴右侧 JSON 到 mcpServers 中并保存",
-    "完全退出并重启 Claude Desktop",
-  ]},
-  { key: "cursor", name: "Cursor", steps: [
-    "打开 Cursor → Settings → MCP",
-    "点击「+ Add new MCP server」，选择类型 command（stdio）",
-    "粘贴右侧 JSON（或写入项目根目录 .cursor/mcp.json）",
-    "重启 Cursor 或刷新 MCP 面板",
-  ]},
-  { key: "vscode", name: "VS Code", steps: [
-    "VS Code → 命令面板（Ctrl+Shift+P）→ MCP: Add Server",
-    "选择「stdio」类型",
-    "将右侧 JSON 写入 mcp.json（项目 .vscode/mcp.json 或全局）",
-    "在 MCP 面板中确认服务器状态为已连接",
-  ]},
-  { key: "http", name: "Cherry Studio 等（HTTP）", steps: [
-    "在支持 HTTP 的客户端（如 Cherry Studio）→ 设置 → MCP 服务器 → 添加",
-    "类型选择 streamable-http（部分客户端写作 SSE）",
-    "URL 填写右侧配置中的地址",
-    "注意：需要托盘程序正在运行且 WebUI 已解锁",
-  ]},
-];
-
-async function loadDocs() {
-  if (state.configs === null) {
-    try { state.configs = await api("/api/mcp-configs"); }
-    catch (ex) { toast(ex.message, "err"); return; }
-  }
-  $("#doc-exe").textContent = state.configs.executable;
-  const tabs = $("#doc-tabs");
-  tabs.innerHTML = DOC_CLIENTS.map(
-    (c, i) => `<div class="tab ${i === 0 ? "active" : ""}" data-key="${c.key}">${c.name}</div>`
-  ).join("");
-  $$("#doc-tabs .tab").forEach((t) =>
-    t.addEventListener("click", () => {
-      $$("#doc-tabs .tab").forEach((x) => x.classList.remove("active"));
-      t.classList.add("active");
-      renderDoc(t.dataset.key);
-    })
-  );
-  renderDoc(DOC_CLIENTS[0].key);
-}
-
-function renderDoc(key) {
-  const c = DOC_CLIENTS.find((x) => x.key === key);
-  const json = JSON.stringify(state.configs[key], null, 2);
-  const html = `<div class="doc-block">
-    <h3>${c.name}</h3>
-    <ol>${c.steps.map((s) => `<li>${esc(s)}</li>`).join("")}</ol>
-    <div class="code-wrap">
-      <button class="btn small copy-pos" id="doc-copy">复制配置</button>
-      <pre>${esc(json)}</pre>
-    </div>
-  </div>`;
-  $("#doc-content").innerHTML = html;
-  $("#doc-copy").addEventListener("click", () => copyText(json));
-}
 
 // ---------------- 设置 ----------------
 $("#btn-change-pw").addEventListener("click", async () => {

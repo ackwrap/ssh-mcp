@@ -28,7 +28,7 @@
       <a href="#servers" data-view="servers">服务器</a>
       <a href="#jumps" data-view="jumps">跳板机</a>
       <a href="#transfer" data-view="transfer">导入导出</a>
-      <a href="#docs" data-view="docs">对接文档</a>
+      <a href="#integrations" data-view="integrations">AI 工具接入</a>
       <a href="#settings" data-view="settings">设置</a>
     </nav>
     <div class="header-right">
@@ -79,12 +79,21 @@
       </div>
     </section>
 
-    <!-- 对接文档 -->
-    <section id="view-docs" class="view hidden">
-      <div class="view-head"><h2>MCP 对接文档</h2></div>
-      <p class="hint">把下方配置粘贴到各 AI 工具即可接入。当前可执行命令：<code id="doc-exe"></code></p>
-      <div class="tabs" id="doc-tabs"></div>
-      <div id="doc-content"></div>
+    <!-- AI 工具接入 -->
+    <section id="view-integrations" class="view hidden">
+      <div class="view-head">
+        <h2>AI 工具接入</h2>
+        <button class="btn" id="btn-refresh-integrations">刷新检测</button>
+      </div>
+      <p class="hint">自动检测本机已安装的 AI 工具，并将 SSH-MCP 写入所选工具的配置。无需手动输入命令或路径。</p>
+      <div class="integration-executable">当前可执行程序：<code id="integration-exe">检测中…</code></div>
+      <div class="integration-toolbar">
+        <button class="btn" id="btn-select-installed" disabled>全选已安装</button>
+        <span id="integration-selection" class="hint">尚未选择工具</span>
+        <button class="btn primary" id="btn-configure-integrations" disabled>一键接入</button>
+      </div>
+      <div id="integration-list" class="integration-grid" aria-live="polite"></div>
+      <div id="integration-results" class="integration-results hidden" aria-live="polite"></div>
     </section>
 
     <!-- 设置 -->
@@ -126,5 +135,6 @@
 
 <div id="toast" class="hidden"></div>
 <script src="/assets/app.js"></script>
+<script src="/assets/integrations.js"></script>
 </body>
 </html>

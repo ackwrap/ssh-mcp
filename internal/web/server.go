@@ -14,13 +14,13 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/ssh-mcp/ssh-mcp-go/internal/config"
+	"github.com/ssh-mcp/ssh-mcp-go/internal/integration"
 	"github.com/ssh-mcp/ssh-mcp-go/internal/mcpserver"
 	"github.com/ssh-mcp/ssh-mcp-go/internal/secure"
 	"github.com/ssh-mcp/ssh-mcp-go/internal/sshclient"
@@ -35,9 +35,10 @@ const (
 var uiFiles embed.FS
 
 type Server struct {
-	store   *config.Store
-	runtime *mcpserver.Runtime
-	mux     *http.ServeMux
+	store        *config.Store
+	runtime      *mcpserver.Runtime
+	integrations *integration.Manager
+	mux          *http.ServeMux
 }
 
 func NewServer(store *config.Store, runtime *mcpserver.Runtime) (*Server, error) {
@@ -51,7 +52,11 @@ func NewServer(store *config.Store, runtime *mcpserver.Runtime) (*Server, error)
 	if runtime == nil {
 		runtime = mcpserver.NewRuntime()
 	}
-	server := &Server{store: store, runtime: runtime, mux: http.NewServeMux()}
+	integrations, err := newIntegrationManager()
+	if err != nil {
+		return nil, err
+	}
+	server := &Server{store: store, runtime: runtime, integrations: integrations, mux: http.NewServeMux()}
 	server.routes()
 	return server, nil
 }
@@ -93,7 +98,8 @@ func (s *Server) routes() {
 
 	s.mux.HandleFunc("GET /api/export", s.handle(s.exportConfig))
 	s.mux.HandleFunc("POST /api/import", s.handle(s.importConfig))
-	s.mux.HandleFunc("GET /api/mcp-configs", s.handle(s.mcpConfigs))
+	s.mux.HandleFunc("GET /api/integrations", s.handle(s.listIntegrations))
+	s.mux.HandleFunc("POST /api/integrations/configure", s.handle(s.configureIntegrations))
 	s.mux.HandleFunc("GET /api/health", s.handle(s.health))
 
 	mcpServer := mcpserver.NewServer(s.runtime)
@@ -613,35 +619,6 @@ func (s *Server) importConfig(w http.ResponseWriter, r *http.Request) error {
 	}
 	s.runtime.Reset()
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "servers": len(cfg.Servers), "jumphosts": len(cfg.JumpHosts)})
-	return nil
-}
-
-func (s *Server) mcpConfigs(w http.ResponseWriter, r *http.Request) error {
-	port, err := GetPort()
-	if err != nil {
-		return err
-	}
-	executable, err := os.Executable()
-	if err != nil {
-		return err
-	}
-	commandName := executable
-	var args []string
-	if strings.Contains(filepath.Clean(executable), string(filepath.Separator)+"go-build") {
-		if cwd, cwdErr := os.Getwd(); cwdErr == nil {
-			commandName = "go"
-			args = []string{"-C", cwd, "run", "."}
-		}
-	}
-	command := map[string]any{"command": commandName}
-	vscodeCommand := map[string]any{"type": "stdio", "command": commandName}
-	if len(args) > 0 {
-		command["args"] = args
-		vscodeCommand["args"] = args
-	}
-	executableCommand := strings.TrimSpace(commandName + " " + strings.Join(args, " "))
-	url := fmt.Sprintf("http://127.0.0.1:%d/mcp/", port)
-	writeJSON(w, http.StatusOK, map[string]any{"executable": executableCommand, "port": port, "claude": map[string]any{"mcpServers": map[string]any{"ssh-mcp": command}}, "cursor": map[string]any{"mcpServers": map[string]any{"ssh-mcp": command}}, "vscode": map[string]any{"servers": map[string]any{"ssh-mcp": vscodeCommand}}, "http": map[string]any{"mcpServers": map[string]any{"ssh-mcp": map[string]any{"type": "streamable-http", "url": url}}}})
 	return nil
 }
 

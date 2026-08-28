@@ -227,77 +227,48 @@ C:\Users\your-name\.ssh\id_ed25519
 端口：8080
 ```
 
-## 8. MCP 客户端接入
+## 8. AI 工具一键接入
 
-打开 WebUI 的“对接文档”页面，可以直接复制当前程序对应的配置。
+WebUI 不再提供需要手动复制的“对接文档”页面。打开“AI 工具接入”后，程序会检测当前 Windows 用户已安装的 AI 工具和已有 `ssh-mcp` 配置。
 
-### Claude Desktop
+支持的工具：
 
-配置示例：
+| 工具 | 检测方式 | 配置方式 |
+| --- | --- | --- |
+| OpenCode | `opencode` 命令 | 官方 `opencode mcp add`，保留 JSONC 注释 |
+| Claude Code | `claude` 命令 | 官方 `claude mcp add --scope user` |
+| OpenAI Codex | `codex` 命令 | 官方 `codex mcp add` |
+| Kimi Code CLI | `kimi` 命令 | 用户级 `~/.kimi-code/mcp.json` |
+| ZCode | `zcode` 命令或配置文件 | `~/.zcode/cli/config.json` |
+| Cursor | `cursor` 命令或应用路径 | `~/.cursor/mcp.json` |
+| Visual Studio Code | `code` 命令或应用路径 | 用户级 `mcp.json` |
+| Claude Desktop | 应用路径或现有配置 | `claude_desktop_config.json` |
 
-```json
-{
-  "mcpServers": {
-    "ssh-mcp": {
-      "command": "C:\\Users\\xiaobai\\Desktop\\ssh-mcp2\\dist\\ssh-mcp.exe"
-    }
-  }
-}
-```
+接入步骤：
 
-保存后完全退出并重新启动 Claude Desktop。
+1. 启动 SSH-MCP 并登录 WebUI。
+2. 打开“AI 工具接入”。
+3. 点击“刷新检测”确认安装状态和配置路径。
+4. 勾选需要接入的工具；已安装且未接入的工具默认选中。
+5. 点击“一键接入”并确认。
+6. 查看每个工具的成功或失败结果。
+7. 按页面提示完全重启对应 AI 工具。
 
-### Cursor
+一键接入只会执行内置的固定适配器，不接受浏览器传入的命令、可执行路径或任意参数。使用配置文件适配器时，程序会保留其他配置，并在原文件旁创建 `.ssh-mcp.bak` 备份；官方 CLI 配置失败时会恢复原文件。
 
-在 Cursor MCP 设置或项目 `.cursor/mcp.json` 中加入：
+OpenCode、Claude Code、Codex 使用各自官方 CLI 写入全局或用户级配置。Kimi Code、ZCode、Cursor、VS Code 和 Claude Desktop 使用其公开配置格式进行原子合并。
 
-```json
-{
-  "mcpServers": {
-    "ssh-mcp": {
-      "command": "C:\\Users\\xiaobai\\Desktop\\ssh-mcp2\\dist\\ssh-mcp.exe"
-    }
-  }
-}
-```
+工具检测使用当前 Windows 用户的 `PATH`、`CODEX_HOME`、`KIMI_CODE_HOME` 等环境设置。只应接入你确认可信的本机工具安装；如果同名命令来自未知目录，应先修正 `PATH`。一键接入会在写入前再次比较文件内容，发现外部更新时拒绝覆盖并要求刷新重试；不要在接入过程中同时编辑同一个配置文件。
 
-### VS Code
+OpenCode 通过官方 CLI 无损修改 JSONC。其他配置文件如果包含 JSONC 注释或尾逗号，一键接入会拒绝重写并保留原文件，避免丢失注释；此时可先将对应文件转换为标准 JSON 后重试。
 
-在项目 `.vscode/mcp.json` 或用户 MCP 配置中加入：
-
-```json
-{
-  "servers": {
-    "ssh-mcp": {
-      "type": "stdio",
-      "command": "C:\\Users\\xiaobai\\Desktop\\ssh-mcp2\\dist\\ssh-mcp.exe"
-    }
-  }
-}
-```
-
-### Streamable HTTP
-
-托盘程序运行时，可以使用：
+托盘运行时仍提供 Streamable HTTP MCP：
 
 ```text
 http://127.0.0.1:8877/mcp/
 ```
 
-配置示例：
-
-```json
-{
-  "mcpServers": {
-    "ssh-mcp": {
-      "type": "streamable-http",
-      "url": "http://127.0.0.1:8877/mcp/"
-    }
-  }
-}
-```
-
-HTTP MCP 依赖托盘程序持续运行。URL 末尾应保留 `/`。
+一键接入默认使用 stdio `ssh-mcp.exe --mcp`，因此每个客户端拥有独立 MCP 子进程；HTTP MCP 仍由唯一托盘实例提供。
 
 ## 9. MCP 工具
 

@@ -44,6 +44,7 @@ Name: "autostart"; Description: "登录 Windows 时自动启动托盘"; GroupDes
 [Files]
 Source: "dist\ssh-mcp.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "AGENTS.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "USAGE.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"context"
@@ -43,14 +42,17 @@ func TestAuthAndServerFlow(t *testing.T) {
 	if auth["password"] != config.Mask {
 		t.Fatalf("password was not masked: %#v", auth)
 	}
-	mcpConfig := requestJSON(t, client, http.MethodGet, httpServer.URL+"/api/mcp-configs", nil, http.StatusOK)
-	serializedConfig, _ := json.Marshal(mcpConfig)
-	if strings.Contains(string(serializedConfig), "--mcp") {
-		t.Fatalf("stdio config should use the default mode: %s", serializedConfig)
+	integrations := requestJSON(t, client, http.MethodGet, httpServer.URL+"/api/integrations", nil, http.StatusOK)
+	if len(integrations["tools"].([]any)) < 5 {
+		t.Fatal("missing AI tool integrations")
 	}
-	httpConfig := mcpConfig["http"].(map[string]any)["mcpServers"].(map[string]any)["ssh-mcp"].(map[string]any)
-	if httpConfig["url"] == nil {
-		t.Fatal("missing HTTP MCP URL")
+	assetResponse, err := client.Get(httpServer.URL + "/assets/integrations.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assetResponse.Body.Close()
+	if assetResponse.StatusCode != http.StatusOK {
+		t.Fatalf("integrations.js status = %d", assetResponse.StatusCode)
 	}
 	requestJSON(t, client, http.MethodPost, httpServer.URL+"/api/auth/lock", map[string]any{}, http.StatusOK)
 	requestJSON(t, client, http.MethodGet, httpServer.URL+"/api/servers", nil, http.StatusUnauthorized)

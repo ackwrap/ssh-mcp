@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SSH-MCP 控制台</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<div id="auth-overlay" class="overlay hidden">
+  <div class="auth-card">
+    <div class="logo">SSH<span>-MCP</span></div>
+    <h1 id="auth-title">设置主密码</h1>
+    <p id="auth-sub">首次使用需要设置主密码，用于加密所有服务器凭据</p>
+    <form id="auth-form">
+      <label>主密码<input type="password" id="auth-pass" autocomplete="new-password" placeholder="至少 6 位"></label>
+      <label id="auth-pass2-wrap" class="hidden">确认密码<input type="password" id="auth-pass2" autocomplete="new-password" placeholder="再次输入"></label>
+      <button type="submit" id="auth-btn">设置并进入</button>
+      <div id="auth-err" class="error hidden"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <div class="brand"><span class="logo small">SSH<span>-MCP</span></span></div>
+    <nav>
+      <a href="#servers" data-view="servers">服务器</a>
+      <a href="#jumps" data-view="jumps">跳板机</a>
+      <a href="#transfer" data-view="transfer">导入导出</a>
+      <a href="#docs" data-view="docs">对接文档</a>
+      <a href="#settings" data-view="settings">设置</a>
+    </nav>
+    <div class="header-right">
+      <span id="lock-state" class="lock-state">🔓 已解锁</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- 服务器 -->
+    <section id="view-servers" class="view hidden">
+      <div class="view-head">
+        <h2>服务器</h2>
+        <button class="btn primary" id="btn-add-server">+ 新增服务器</button>
+      </div>
+      <div id="server-list" class="card-grid"></div>
+    </section>
+
+    <!-- 跳板机 -->
+    <section id="view-jumps" class="view hidden">
+      <div class="view-head">
+        <h2>跳板机</h2>
+        <button class="btn primary" id="btn-add-jump">+ 新增跳板机</button>
+      </div>
+      <p class="hint">跳板机支持链式多跳：可配置"上一级跳板"。服务器可通过跳板或代理（SOCKS5/HTTP）连接。</p>
+      <div id="jump-list" class="card-grid"></div>
+    </section>
+
+    <!-- 导入导出 -->
+    <section id="view-transfer" class="view hidden">
+      <div class="view-head"><h2>复制粘贴配置</h2></div>
+      <div class="panel">
+        <h3>导出</h3>
+        <p class="hint">完整导出包含加密后的凭据，可在本机或相同环境导入恢复；模板导出不包含任何凭据。</p>
+        <div class="row">
+          <button class="btn" id="btn-export-full">复制完整配置</button>
+          <button class="btn" id="btn-export-full-file">下载完整配置</button>
+          <button class="btn" id="btn-export-template">复制无凭据模板</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>导入</h3>
+        <p class="hint">这里只能导入完整加密导出 JSON；无凭据模板仅用于参考，不能直接恢复配置。完整导出需要提供导出时的主密码；导入后将以当前主密码重新加密并整体替换现有配置。</p>
+        <textarea id="import-text" rows="8" placeholder='{"version": 1, "servers": [...], ...}'></textarea>
+        <div class="row">
+          <label>主密码（完整导出必填）<input type="password" id="import-pass" placeholder="导出时的主密码"></label>
+          <button class="btn primary" id="btn-import">导入配置</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 对接文档 -->
+    <section id="view-docs" class="view hidden">
+      <div class="view-head"><h2>MCP 对接文档</h2></div>
+      <p class="hint">把下方配置粘贴到各 AI 工具即可接入。当前可执行命令：<code id="doc-exe"></code></p>
+      <div class="tabs" id="doc-tabs"></div>
+      <div id="doc-content"></div>
+    </section>
+
+    <!-- 设置 -->
+    <section id="view-settings" class="view hidden">
+      <div class="view-head"><h2>设置</h2></div>
+      <div class="panel">
+        <h3>修改主密码</h3>
+        <div class="form-grid">
+          <label>当前主密码<input type="password" id="pw-old"></label>
+          <label>新主密码<input type="password" id="pw-new"></label>
+          <label>确认新主密码<input type="password" id="pw-new2"></label>
+        </div>
+        <button class="btn primary" id="btn-change-pw">修改主密码</button>
+      </div>
+      <div class="panel">
+        <h3>锁定</h3>
+        <p class="hint">锁定后清除本机解密密钥，MCP 工具将无法使用，直到重新登录。</p>
+        <button class="btn" id="btn-lock">🔒 锁定并退出登录</button>
+      </div>
+      <div class="panel danger">
+        <h3>忘记主密码</h3>
+        <p class="hint">无法找回主密码。确认后将<strong>清空全部服务器配置与凭据</strong>，并允许重新设置主密码。</p>
+        <div class="row">
+          <input type="text" id="forgot-confirm" placeholder='输入 DELETE 确认'>
+          <button class="btn danger" id="btn-forgot">清空并重置</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>关于</h3>
+        <p id="about-info" class="hint"></p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="modal" class="overlay hidden">
+  <div class="modal-card" id="modal-card"></div>
+</div>
+
+<div id="toast" class="hidden"></div>
+<script src="/assets/app.js"></script>
+</body>
+</html>

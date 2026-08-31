@@ -68,13 +68,13 @@ ssh-mcp 0.1.0
 
 ### 启动托盘程序
 
-从开始菜单或桌面快捷方式启动时，安装器会自动附加 `--open`。直接运行免安装程序也可以执行：
+从开始菜单或桌面快捷方式启动时，安装器会自动附加 `--open`。直接运行免安装程序并仅启动托盘服务时，请执行：
 
 ```powershell
-.\dist\ssh-mcp.exe
+.\dist\ssh-mcp.exe --tray
 ```
 
-程序会驻留在 Windows 系统托盘，并在本机启动 WebUI 服务。
+程序会驻留在 Windows 系统托盘，并在本机启动 WebUI 和 HTTP MCP 服务。
 
 ### 启动并打开 WebUI
 
@@ -92,7 +92,13 @@ Windows 托盘和 Streamable HTTP MCP 使用系统命名互斥量保证只有一
 http://127.0.0.1:8877
 ```
 
-### 运行 stdio MCP
+### 运行 stdio MCP（默认）
+
+```powershell
+.\dist\ssh-mcp.exe
+```
+
+旧的 `--mcp` 参数仍然兼容：
 
 ```powershell
 .\dist\ssh-mcp.exe --mcp
@@ -100,11 +106,11 @@ http://127.0.0.1:8877
 
 该模式通常由 Claude Desktop、Cursor、VS Code 等 MCP 客户端自动启动，不建议直接在终端中交互使用。
 
-stdio MCP 不使用全局单例。每个 MCP 客户端会启动自己的 `--mcp` 子进程，因为每个进程都需要独立的 stdin/stdout 通道；多个 stdio 子进程会通过配置文件锁和 revision 机制安全共享同一份配置。这不代表启动了多个 HTTP MCP 服务。
+stdio MCP 不使用全局单例。每个 MCP 客户端会启动独立子进程，因为每个进程都需要独立的 stdin/stdout 通道；多个 stdio 子进程会通过配置文件锁和 revision 机制安全共享同一份配置。这不代表启动了多个 HTTP MCP 服务。
 
 ### 参数限制
 
-`--open` 和 `--mcp` 不能同时使用。未知参数会被拒绝。
+`--mcp`、`--tray` 和 `--open` 不能同时使用。未知参数会被拒绝。
 
 ## 4. 首次初始化
 
@@ -233,8 +239,7 @@ C:\Users\your-name\.ssh\id_ed25519
 {
   "mcpServers": {
     "ssh-mcp": {
-      "command": "C:\\Users\\xiaobai\\Desktop\\ssh-mcp2\\dist\\ssh-mcp.exe",
-      "args": ["--mcp"]
+      "command": "C:\\Users\\xiaobai\\Desktop\\ssh-mcp2\\dist\\ssh-mcp.exe"
     }
   }
 }
@@ -250,8 +255,7 @@ C:\Users\your-name\.ssh\id_ed25519
 {
   "mcpServers": {
     "ssh-mcp": {
-      "command": "C:\\Users\\xiaobai\\Desktop\\ssh-mcp2\\dist\\ssh-mcp.exe",
-      "args": ["--mcp"]
+      "command": "C:\\Users\\xiaobai\\Desktop\\ssh-mcp2\\dist\\ssh-mcp.exe"
     }
   }
 }
@@ -266,8 +270,7 @@ C:\Users\your-name\.ssh\id_ed25519
   "servers": {
     "ssh-mcp": {
       "type": "stdio",
-      "command": "C:\\Users\\xiaobai\\Desktop\\ssh-mcp2\\dist\\ssh-mcp.exe",
-      "args": ["--mcp"]
+      "command": "C:\\Users\\xiaobai\\Desktop\\ssh-mcp2\\dist\\ssh-mcp.exe"
     }
   }
 }
@@ -512,11 +515,7 @@ Get-NetTCPConnection -LocalPort 8877 -ErrorAction SilentlyContinue
 
 ### MCP 客户端找不到工具
 
-确认命令路径指向实际存在的 `ssh-mcp.exe`，并包含：
-
-```json
-"args": ["--mcp"]
-```
+确认命令路径指向实际存在的 `ssh-mcp.exe`。stdio 已是默认模式，无需配置 `args`；旧配置中的 `"args": ["--mcp"]` 仍然可用。
 
 在终端验证版本：
 

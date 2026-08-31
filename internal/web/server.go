@@ -626,16 +626,22 @@ func (s *Server) mcpConfigs(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	commandName := executable
-	args := []string{"--mcp"}
+	var args []string
 	if strings.Contains(filepath.Clean(executable), string(filepath.Separator)+"go-build") {
 		if cwd, cwdErr := os.Getwd(); cwdErr == nil {
 			commandName = "go"
-			args = []string{"-C", cwd, "run", ".", "--mcp"}
+			args = []string{"-C", cwd, "run", "."}
 		}
 	}
-	command := map[string]any{"command": commandName, "args": args}
+	command := map[string]any{"command": commandName}
+	vscodeCommand := map[string]any{"type": "stdio", "command": commandName}
+	if len(args) > 0 {
+		command["args"] = args
+		vscodeCommand["args"] = args
+	}
+	executableCommand := strings.TrimSpace(commandName + " " + strings.Join(args, " "))
 	url := fmt.Sprintf("http://127.0.0.1:%d/mcp/", port)
-	writeJSON(w, http.StatusOK, map[string]any{"executable": commandName + " " + strings.Join(args, " "), "port": port, "claude": map[string]any{"mcpServers": map[string]any{"ssh-mcp": command}}, "cursor": map[string]any{"mcpServers": map[string]any{"ssh-mcp": command}}, "vscode": map[string]any{"servers": map[string]any{"ssh-mcp": map[string]any{"type": "stdio", "command": commandName, "args": args}}}, "http": map[string]any{"mcpServers": map[string]any{"ssh-mcp": map[string]any{"type": "streamable-http", "url": url}}}})
+	writeJSON(w, http.StatusOK, map[string]any{"executable": executableCommand, "port": port, "claude": map[string]any{"mcpServers": map[string]any{"ssh-mcp": command}}, "cursor": map[string]any{"mcpServers": map[string]any{"ssh-mcp": command}}, "vscode": map[string]any{"servers": map[string]any{"ssh-mcp": vscodeCommand}}, "http": map[string]any{"mcpServers": map[string]any{"ssh-mcp": map[string]any{"type": "streamable-http", "url": url}}}})
 	return nil
 }
 

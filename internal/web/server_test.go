@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"context"
@@ -43,6 +44,10 @@ func TestAuthAndServerFlow(t *testing.T) {
 		t.Fatalf("password was not masked: %#v", auth)
 	}
 	mcpConfig := requestJSON(t, client, http.MethodGet, httpServer.URL+"/api/mcp-configs", nil, http.StatusOK)
+	serializedConfig, _ := json.Marshal(mcpConfig)
+	if strings.Contains(string(serializedConfig), "--mcp") {
+		t.Fatalf("stdio config should use the default mode: %s", serializedConfig)
+	}
 	httpConfig := mcpConfig["http"].(map[string]any)["mcpServers"].(map[string]any)["ssh-mcp"].(map[string]any)
 	if httpConfig["url"] == nil {
 		t.Fatal("missing HTTP MCP URL")

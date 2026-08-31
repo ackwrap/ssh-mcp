@@ -46,7 +46,10 @@ func Run(openWebUI bool) error {
 		return err
 	}
 	if !unique {
-		return OpenWebUI(port, "")
+		if openWebUI {
+			return OpenWebUI(port, "")
+		}
+		return nil
 	}
 
 	runtime := mcpserver.NewRuntime()
@@ -206,7 +209,7 @@ func setAutostart(enabled bool) error {
 	if err != nil {
 		return err
 	}
-	return key.SetStringValue(runValue, `"`+executable+`"`)
+	return key.SetStringValue(runValue, `"`+executable+`" --tray`)
 }
 
 func iconICO() []byte {

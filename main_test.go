@@ -20,3 +20,29 @@ func TestCLIFlags(t *testing.T) {
 		t.Fatalf("stderr=%q", stderr.String())
 	}
 }
+
+func TestResolveLaunchMode(t *testing.T) {
+	tests := []struct {
+		name            string
+		mcp, tray, open bool
+		want            launchMode
+		wantErr         bool
+	}{
+		{name: "default is stdio", want: launchModeStdio},
+		{name: "legacy mcp flag", mcp: true, want: launchModeStdio},
+		{name: "tray", tray: true, want: launchModeTray},
+		{name: "open", open: true, want: launchModeOpen},
+		{name: "conflicting modes", tray: true, open: true, wantErr: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := resolveLaunchMode(test.mcp, test.tray, test.open)
+			if (err != nil) != test.wantErr {
+				t.Fatalf("err=%v wantErr=%v", err, test.wantErr)
+			}
+			if !test.wantErr && got != test.want {
+				t.Fatalf("mode=%v want=%v", got, test.want)
+			}
+		})
+	}
+}

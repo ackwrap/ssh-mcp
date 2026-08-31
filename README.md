@@ -39,11 +39,12 @@ Go 版继续使用：
 ```powershell
 go test -p 1 ./...
 go run . --version
-go run . --mcp
+go run .
+go run . --tray
 go run . --open
 ```
 
-Windows 下直接运行 `go run .` 启动托盘；`--open` 会在服务就绪后打开 WebUI。WebUI 默认地址为 `http://127.0.0.1:8877`。
+直接运行 `go run .` 默认启动 stdio MCP；`--tray` 启动托盘、WebUI 和 HTTP MCP，`--open` 还会在服务就绪后打开 WebUI。WebUI 默认地址为 `http://127.0.0.1:8877`。
 
 ## 构建
 
@@ -64,17 +65,19 @@ dist\installer\SSH-MCP-Setup-0.1.0.exe
 .\build.ps1 -SkipInstaller
 ```
 
-安装器依赖 Inno Setup 6；缺少时构建脚本会尝试通过 `winget` 安装。开始菜单、桌面快捷方式和安装完成页都使用 `ssh-mcp.exe --open`，启动托盘后直接打开 WebUI。构建产物为单文件 Windows GUI 程序，前端资源已通过 `embed` 打包；`--mcp` 模式仍通过继承的标准输入输出管道工作。
+安装器依赖 Inno Setup 6；缺少时构建脚本会尝试通过 `winget` 安装。开始菜单、桌面快捷方式和安装完成页都使用 `ssh-mcp.exe --open`，启动托盘后直接打开 WebUI；开机自启使用 `ssh-mcp.exe --tray`。构建产物为单文件 Windows GUI 程序，前端资源已通过 `embed` 打包；默认 stdio 模式仍通过继承的标准输入输出管道工作。
 
 ## 参数
 
 | 参数 | 用途 |
 | --- | --- |
 | `--version` / `-v` | 显示版本 |
-| `--mcp` | 运行 stdio MCP 服务器 |
+| 无参数 | 运行 stdio MCP 服务器（默认） |
+| `--mcp` | 运行 stdio MCP 服务器（兼容旧配置） |
+| `--tray` | 启动或连接托盘实例 |
 | `--open` | 启动或连接托盘实例并打开 WebUI |
 
-`--open` 和 `--mcp` 不能同时使用，未知参数会被拒绝。
+`--mcp`、`--tray` 和 `--open` 不能同时使用，未知参数会被拒绝。
 
 ## 环境变量
 
@@ -87,8 +90,8 @@ dist\installer\SSH-MCP-Setup-0.1.0.exe
 
 ## MCP 端点
 
-- stdio：`ssh-mcp.exe --mcp`
-- Streamable HTTP：`http://127.0.0.1:<端口>/mcp/`
+- stdio：`ssh-mcp.exe`（旧配置可继续使用 `ssh-mcp.exe --mcp`）
+- Streamable HTTP：先用 `ssh-mcp.exe --tray` 启动托盘服务，再连接 `http://127.0.0.1:<端口>/mcp/`
 - 健康检查：`http://127.0.0.1:<端口>/api/health`
 
 HTTP 服务仅绑定 `127.0.0.1`。不要通过端口转发或反向代理将 WebUI、`/api/*` 或 `/mcp/` 暴露到局域网或公网。

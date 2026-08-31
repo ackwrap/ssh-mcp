@@ -32,7 +32,7 @@
 
 | 路径 | 职责 |
 | --- | --- |
-| `main.go` | CLI 参数解析及 stdio MCP/托盘模式分发 |
+| `main.go` | CLI 参数解析及默认 stdio MCP/`--tray` 托盘模式分发 |
 | `internal/config` | 配置模型、校验、加密存储、CRUD、导入导出 |
 | `internal/secure` | PBKDF2、Fernet、密钥文件和会话密钥 |
 | `internal/sshclient` | SSH、SFTP、连接池、跳板和代理 |
@@ -135,10 +135,10 @@ ssh_stat
 - 所有外部输入都必须经过边界和类型校验。
 - SSH 命令输出和远程文件读写必须保留大小限制。
 - 新增后台 goroutine 时必须有明确退出路径，避免连接和文件句柄泄漏。
-- Windows 专用实现使用 build tag，保证非 Windows 下 `--mcp` 仍可编译运行。
+- Windows 专用实现使用 build tag，保证非 Windows 下默认 stdio 模式及兼容参数 `--mcp` 仍可编译运行。
 - 修改连接配置后必须关闭旧连接池，不能按服务器名称错误复用旧连接。
 - Windows 托盘和 Streamable HTTP MCP 必须保持全系统单实例，使用 `Local\SSH-MCP-Singleton` 命名互斥量。
-- stdio `--mcp` 不得使用全局单例；每个 MCP 客户端需要独立子进程和独立标准输入输出通道。
+- 默认 stdio 模式及兼容参数 `--mcp` 不得使用全局单例；每个 MCP 客户端需要独立子进程和独立标准输入输出通道。
 
 ## 开发命令
 
@@ -240,7 +240,7 @@ go mod verify
 ## 安装器约定
 
 - 开始菜单主快捷方式、桌面快捷方式和安装完成页必须使用 `ssh-mcp.exe --open`。
-- 开机自启保持无参数启动，只启动托盘，避免每次登录 Windows 都弹出浏览器。
+- 开机自启必须使用 `ssh-mcp.exe --tray`，只启动托盘，避免进入默认 stdio 模式或弹出浏览器。
 - 安装器使用当前用户权限安装到 `{localappdata}\Programs\SSH-MCP`。
 - 卸载时不得默认删除 `%LOCALAPPDATA%\ssh_mcp`，避免用户配置丢失。
 - 安装包版本必须从构建后的 `ssh-mcp.exe --version` 获取，不能与应用版本不一致。

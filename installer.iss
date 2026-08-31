@@ -60,7 +60,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameter
 
 [Registry]
 ; 开机自启只启动托盘，不弹出浏览器；用户手动启动快捷方式统一使用 --open。
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "SSH-MCP"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: autostart
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "SSH-MCP"; ValueData: """{app}\{#MyAppExeName}"" --tray"; Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--open"; WorkingDir: "{app}"; Description: "启动 {#MyAppName} 并打开 WebUI"; Flags: nowait postinstall skipifsilent

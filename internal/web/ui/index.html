@@ -85,13 +85,16 @@
         <h2>AI 工具接入</h2>
         <button class="btn" id="btn-refresh-integrations">刷新检测</button>
       </div>
-      <p class="hint">自动检测本机已安装的 AI 工具，并优先通过托盘提供的本机 Streamable HTTP 服务接入。相同配置已存在时会直接跳过。</p>
-      <div class="integration-executable">MCP HTTP 地址：<code id="integration-exe">检测中…</code></div>
+      <p class="hint">自动检测本机 AI 工具，并使用独立的无参数 stdio 子进程接入。取消接入只删除 ssh-mcp 配置，不会卸载 AI 工具或 SSH-MCP 应用。</p>
+      <div class="integration-executable">MCP stdio 命令：<code id="integration-exe">检测中…</code></div>
       <div class="integration-toolbar">
-        <button class="btn" id="btn-select-installed" disabled>全选已安装</button>
+        <button class="btn" id="btn-select-installed" disabled>选择待接入</button>
+        <button class="btn" id="btn-select-removable" disabled>选择可取消</button>
         <span id="integration-selection" class="hint">尚未选择工具</span>
         <button class="btn primary" id="btn-configure-integrations" disabled>一键接入</button>
+        <button class="btn danger" id="btn-remove-integrations" disabled>取消接入</button>
       </div>
+      <p id="integration-action-hint" class="integration-action-hint" aria-live="polite"></p>
       <div id="integration-list" class="integration-grid" aria-live="polite"></div>
       <div id="integration-results" class="integration-results hidden" aria-live="polite"></div>
     </section>

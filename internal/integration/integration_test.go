@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -50,10 +51,11 @@ func TestDetectInstalledAndConfiguredJSONC(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	command, _ := json.Marshal(manager.serverCommand)
 	content := `{
   // Existing user comment
   "mcp": {
-    "ssh-mcp": {"type": "remote", "url": "` + testServerURL + `",},
+    "ssh-mcp": {"type": "local", "command": ` + string(command) + `,},
   },
 }`
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
@@ -61,18 +63,19 @@ func TestDetectInstalledAndConfiguredJSONC(t *testing.T) {
 	}
 	tools := manager.Detect()
 	openCode := findTool(t, tools, "opencode")
-	if !openCode.Installed || !openCode.Configured || openCode.ConfigPath != path {
+	if !openCode.Installed || !openCode.Present || !openCode.Configured || openCode.ConfigPath != path {
 		t.Fatalf("OpenCode detection = %#v", openCode)
 	}
 	if findTool(t, tools, "codex").Installed {
 		t.Fatal("Codex should not be installed")
 	}
-	content = `{"mcp":{"ssh-mcp":{"type":"local","command":["old.exe","--mcp"]}}}`
+	content = `{"mcp":{"ssh-mcp":{"type":"remote","url":"` + testServerURL + `"}}}`
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if findTool(t, manager.Detect(), "opencode").Configured {
-		t.Fatal("legacy stdio OpenCode config should be upgraded to HTTP")
+	stale := findTool(t, manager.Detect(), "opencode")
+	if !stale.Present || stale.Configured {
+		t.Fatalf("legacy HTTP OpenCode config should be migrated to stdio: %#v", stale)
 	}
 }
 
@@ -111,28 +114,59 @@ func TestDetectCodexFromKnownNPMPathWithoutPATH(t *testing.T) {
 	}
 }
 
-func TestCodexConfiguredRequiresCurrentHTTPURL(t *testing.T) {
-	current := []byte("[mcp_servers.ssh-mcp] # SSH-MCP\nurl = \"" + testServerURL + "\" # local endpoint\n")
-	if !codexHTTPConfigured(current, testServerURL) {
-		t.Fatal("current Codex HTTP config was not detected")
+func TestResidualConfigDoesNotMarkToolInstalledOrAutoEligible(t *testing.T) {
+	tests := []struct {
+		id      string
+		content string
+	}{
+		{id: "kimi-code", content: `{"mcpServers":{"ssh-mcp":{"url":"` + testServerURL + `"}}}`},
+		{id: "zcode", content: `{"mcp":{"servers":{"ssh-mcp":{"type":"http","url":"` + testServerURL + `"}}}}`},
+		{id: "claude-desktop", content: `{"mcpServers":{"ssh-mcp":{"url":"` + testServerURL + `"}}}`},
 	}
-	legacy := []byte("[mcp_servers.ssh-mcp]\ncommand = \"ssh-mcp.exe\"\nargs = [\"--mcp\"]\n")
-	if codexHTTPConfigured(legacy, testServerURL) {
-		t.Fatal("legacy Codex stdio config should be upgraded to HTTP")
+	for _, test := range tests {
+		t.Run(test.id, func(t *testing.T) {
+			manager := testManager(t, func(string) (string, error) { return "", errors.New("not found") }, nil)
+			path := manager.configPaths(test.id)[0]
+			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(test.content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			tool := findTool(t, manager.Detect(), test.id)
+			if tool.Installed || !tool.Present || tool.Configured {
+				t.Fatalf("residual state = %#v", tool)
+			}
+		})
 	}
 }
 
-func TestDirectConfigDetectionRequiresMatchingTransport(t *testing.T) {
+func TestCodexConfigStateRequiresCurrentStdioCommand(t *testing.T) {
 	manager := testManager(t, func(string) (string, error) { return "", errors.New("not found") }, nil)
+	current := []byte("[mcp_servers.ssh-mcp] # SSH-MCP\ncommand = " + strconv.Quote(manager.serverCommand[0]) + "\n")
+	present, configured := codexConfigState(current, manager.serverCommand)
+	if !present || !configured {
+		t.Fatalf("current Codex stdio config state = %v, %v", present, configured)
+	}
+	legacyHTTP := []byte("[mcp_servers.ssh-mcp]\nurl = \"" + testServerURL + "\"\n")
+	present, configured = codexConfigState(legacyHTTP, manager.serverCommand)
+	if !present || configured {
+		t.Fatalf("legacy Codex HTTP config state = %v, %v", present, configured)
+	}
+}
+
+func TestDirectConfigDetectionRequiresMatchingStdioCommand(t *testing.T) {
+	manager := testManager(t, func(string) (string, error) { return "", errors.New("not found") }, nil)
+	stdio := map[string]any{"command": manager.serverCommand[0]}
 	tests := []struct {
 		id       string
 		matching map[string]any
 		stale    map[string]any
 	}{
-		{id: "kimi-code", matching: map[string]any{"transport": "http", "url": testServerURL}, stale: map[string]any{"transport": "stdio", "url": testServerURL}},
-		{id: "zcode", matching: map[string]any{"type": "http", "url": testServerURL}, stale: map[string]any{"type": "sse", "url": testServerURL}},
-		{id: "vscode", matching: map[string]any{"type": "http", "url": testServerURL}, stale: map[string]any{"type": "stdio", "url": testServerURL}},
-		{id: "cursor", matching: map[string]any{"url": testServerURL}, stale: map[string]any{"url": "http://127.0.0.1:9999/mcp/"}},
+		{id: "kimi-code", matching: stdio, stale: map[string]any{"transport": "http", "url": testServerURL}},
+		{id: "zcode", matching: map[string]any{"type": "stdio", "command": manager.serverCommand[0]}, stale: map[string]any{"type": "http", "url": testServerURL}},
+		{id: "vscode", matching: map[string]any{"type": "stdio", "command": manager.serverCommand[0]}, stale: map[string]any{"type": "http", "url": testServerURL}},
+		{id: "cursor", matching: stdio, stale: map[string]any{"url": testServerURL}},
 	}
 	for _, test := range tests {
 		t.Run(test.id, func(t *testing.T) {
@@ -183,8 +217,11 @@ func TestConfigureKimiPreservesExistingConfigAndBacksUp(t *testing.T) {
 		t.Fatal("existing MCP server was removed")
 	}
 	sshMCP := servers[serverName].(map[string]any)
-	if sshMCP["url"] != testServerURL || sshMCP["transport"] != "http" {
+	if sshMCP["command"] != manager.serverCommand[0] {
 		t.Fatalf("ssh-mcp entry = %#v", sshMCP)
+	}
+	if _, exists := sshMCP["args"]; exists {
+		t.Fatalf("default stdio entry should not include args: %#v", sshMCP)
 	}
 }
 
@@ -193,13 +230,12 @@ func TestDirectConfigAdaptersWriteExpectedRootShape(t *testing.T) {
 		id       string
 		command  string
 		rootPath []string
-		typeHTTP bool
-		stdio    bool
+		typed    bool
 	}{
-		{id: "zcode", command: "zcode", rootPath: []string{"mcp", "servers"}, typeHTTP: true},
+		{id: "zcode", command: "zcode", rootPath: []string{"mcp", "servers"}, typed: true},
 		{id: "cursor", command: "cursor", rootPath: []string{"mcpServers"}},
-		{id: "vscode", command: "code", rootPath: []string{"servers"}, typeHTTP: true},
-		{id: "claude-desktop", command: "claude-desktop", rootPath: []string{"mcpServers"}, stdio: true},
+		{id: "vscode", command: "code", rootPath: []string{"servers"}, typed: true},
+		{id: "claude-desktop", command: "claude-desktop", rootPath: []string{"mcpServers"}},
 	}
 	for _, test := range tests {
 		t.Run(test.id, func(t *testing.T) {
@@ -226,18 +262,14 @@ func TestDirectConfigAdaptersWriteExpectedRootShape(t *testing.T) {
 				t.Fatalf("missing config path %v in %#v", test.rootPath, root)
 			}
 			entry := entries[serverName].(map[string]any)
-			if test.stdio {
-				if entry["command"] != manager.serverCommand[0] {
-					t.Fatalf("stdio entry = %#v", entry)
-				}
-				if _, exists := entry["args"]; exists {
-					t.Fatalf("default stdio entry should not include args: %#v", entry)
-				}
-			} else if entry["url"] != testServerURL {
-				t.Fatalf("HTTP entry = %#v", entry)
+			if entry["command"] != manager.serverCommand[0] {
+				t.Fatalf("stdio entry = %#v", entry)
 			}
-			if test.typeHTTP && entry["type"] != "http" {
-				t.Fatalf("typed HTTP entry = %#v", entry)
+			if _, exists := entry["args"]; exists {
+				t.Fatalf("default stdio entry should not include args: %#v", entry)
+			}
+			if test.typed && entry["type"] != "stdio" {
+				t.Fatalf("typed stdio entry = %#v", entry)
 			}
 		})
 	}
@@ -262,11 +294,11 @@ func TestOfficialCLIArgumentsAreFixed(t *testing.T) {
 		}
 	}
 	want := [][]string{
-		{"mcp", "add", serverName, "--url", testServerURL},
+		{"mcp", "add", serverName, "--", manager.serverCommand[0]},
 		{"mcp", "remove", "--scope", "user", serverName},
-		{"mcp", "add", "--transport", "http", "--scope", "user", serverName, testServerURL},
+		{"mcp", "add", "--scope", "user", serverName, "--", manager.serverCommand[0]},
 		{"mcp", "remove", serverName},
-		{"mcp", "add", serverName, "--url", testServerURL},
+		{"mcp", "add", serverName, "--", manager.serverCommand[0]},
 	}
 	if len(calls) != len(want) {
 		t.Fatalf("calls = %#v", calls)
@@ -293,7 +325,8 @@ func TestConfigureSkipsMatchingOpenCodeConfig(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	content := []byte(`{"mcp":{"ssh-mcp":{"type":"remote","url":"` + testServerURL + `"}}}`)
+	command, _ := json.Marshal(manager.serverCommand)
+	content := []byte(`{"mcp":{"ssh-mcp":{"type":"local","command":` + string(command) + `}}}`)
 	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -384,6 +417,201 @@ func TestOpenCodeFailureRestoresEveryPossibleConfigTarget(t *testing.T) {
 	backup, err := os.ReadFile(paths[2] + ".ssh-mcp.bak")
 	if err != nil || !reflect.DeepEqual(backup, original) {
 		t.Fatalf("config.json backup = %q, err=%v", backup, err)
+	}
+}
+
+func TestRemoveDirectConfigPreservesOtherServersAndBacksUp(t *testing.T) {
+	manager := testManager(t, func(string) (string, error) { return "", errors.New("not found") }, nil)
+	path := manager.configPaths("kimi-code")[0]
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	original := []byte(`{"mcpServers":{"existing":{"url":"https://example.com"},"ssh-mcp":{"command":"ssh-mcp.exe"}},"other":true}`)
+	if err := os.WriteFile(path, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result := manager.Remove(context.Background(), []string{"kimi-code"})[0]
+	if !result.OK || result.BackupPath == "" {
+		t.Fatalf("result = %#v", result)
+	}
+	backup, err := os.ReadFile(result.BackupPath)
+	if err != nil || !reflect.DeepEqual(backup, original) {
+		t.Fatalf("backup = %q, err=%v", backup, err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var root map[string]any
+	if err := json.Unmarshal(data, &root); err != nil {
+		t.Fatal(err)
+	}
+	servers := root["mcpServers"].(map[string]any)
+	if _, exists := servers[serverName]; exists {
+		t.Fatalf("ssh-mcp was not removed: %#v", servers)
+	}
+	if _, exists := servers["existing"]; !exists || root["other"] != true {
+		t.Fatalf("unrelated config was changed: %#v", root)
+	}
+}
+
+func TestRemoveOfficialCLIArgumentsAreFixed(t *testing.T) {
+	type call struct {
+		command string
+		args    []string
+	}
+	var calls []call
+	manager := testManager(t, func(name string) (string, error) {
+		return `C:\bin\` + name + ".exe", nil
+	}, func(_ context.Context, command string, args ...string) (string, error) {
+		calls = append(calls, call{command: command, args: append([]string(nil), args...)})
+		return "ok", nil
+	})
+	claudePath := manager.configPaths("claude-code")[0]
+	if err := os.MkdirAll(filepath.Dir(claudePath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(claudePath, []byte(`{"mcpServers":{"ssh-mcp":{"type":"http","url":"`+testServerURL+`"}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	codexPath := manager.configPaths("codex")[0]
+	if err := os.MkdirAll(filepath.Dir(codexPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(codexPath, []byte("[mcp_servers.ssh-mcp]\nurl = \""+testServerURL+"\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	results := manager.Remove(context.Background(), []string{"claude-code", "codex"})
+	for _, result := range results {
+		if !result.OK {
+			t.Fatalf("result = %#v", result)
+		}
+	}
+	want := [][]string{
+		{"mcp", "remove", "--scope", "user", serverName},
+		{"mcp", "remove", serverName},
+	}
+	if len(calls) != len(want) {
+		t.Fatalf("calls = %#v", calls)
+	}
+	for index := range want {
+		if !reflect.DeepEqual(calls[index].args, want[index]) {
+			t.Fatalf("call %d args = %#v, want %#v", index, calls[index].args, want[index])
+		}
+	}
+}
+
+func TestRemoveCLIFailureDoesNotOverwriteConcurrentUpdate(t *testing.T) {
+	var configPath string
+	manager := testManager(t, func(name string) (string, error) {
+		if name == "codex" {
+			return `C:\bin\codex.exe`, nil
+		}
+		return "", errors.New("not found")
+	}, func(_ context.Context, _ string, _ ...string) (string, error) {
+		if err := os.WriteFile(configPath, []byte("[mcp_servers.external]\ncommand = \"new\"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return "TOKEN=TOP_SECRET", errors.New("exit 1")
+	})
+	configPath = manager.configPaths("codex")[0]
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	original := []byte("[mcp_servers.ssh-mcp]\ncommand = \"ssh-mcp.exe\"\n")
+	if err := os.WriteFile(configPath, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result := manager.Remove(context.Background(), []string{"codex"})[0]
+	if result.OK || !strings.Contains(result.Message, "未自动回滚") || strings.Contains(result.Message, "TOP_SECRET") {
+		t.Fatalf("result = %#v", result)
+	}
+	current, err := os.ReadFile(configPath)
+	if err != nil || !strings.Contains(string(current), "mcp_servers.external") {
+		t.Fatalf("concurrent update was overwritten: %q, err=%v", current, err)
+	}
+	backup, err := os.ReadFile(result.BackupPath)
+	if err != nil || !reflect.DeepEqual(backup, original) {
+		t.Fatalf("backup = %q, err=%v", backup, err)
+	}
+}
+
+func TestRemoveClaudeAndCodexResidualConfigWithoutInstalledCLI(t *testing.T) {
+	manager := testManager(t, func(string) (string, error) { return "", errors.New("not found") }, nil)
+	claudePath := manager.configPaths("claude-code")[0]
+	if err := os.MkdirAll(filepath.Dir(claudePath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(claudePath, []byte(`{"mcpServers":{"other":{"command":"other"},"ssh-mcp":{"url":"`+testServerURL+`"}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	codexPath := manager.configPaths("codex")[0]
+	if err := os.MkdirAll(filepath.Dir(codexPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	codexOriginal := "[mcp_servers.other]\ncommand = \"other\"\n\n[mcp_servers.ssh-mcp] # remove\nurl = \"" + testServerURL + "\"\n\n[features]\nexample = true\n"
+	if err := os.WriteFile(codexPath, []byte(codexOriginal), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	results := manager.Remove(context.Background(), []string{"claude-code", "codex"})
+	for _, result := range results {
+		if !result.OK || result.BackupPath == "" {
+			t.Fatalf("result = %#v", result)
+		}
+	}
+	claudeData, err := os.ReadFile(claudePath)
+	if err != nil || strings.Contains(string(claudeData), serverName) || !strings.Contains(string(claudeData), "other") {
+		t.Fatalf("Claude config = %q, err=%v", claudeData, err)
+	}
+	codexData, err := os.ReadFile(codexPath)
+	if err != nil || strings.Contains(string(codexData), "mcp_servers.ssh-mcp") || !strings.Contains(string(codexData), "mcp_servers.other") || !strings.Contains(string(codexData), "[features]") {
+		t.Fatalf("Codex config = %q, err=%v", codexData, err)
+	}
+}
+
+func TestRemoveOpenCodeJSONCPreservesCommentsOnFailure(t *testing.T) {
+	manager := testManager(t, func(string) (string, error) { return "", errors.New("not found") }, nil)
+	path := manager.configPaths("opencode")[1]
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	original := []byte("{\n  // keep\n  \"mcp\": {\"ssh-mcp\": {\"type\": \"remote\", \"url\": \"" + testServerURL + "\"}},\n}\n")
+	if err := os.WriteFile(path, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result := manager.Remove(context.Background(), []string{"opencode"})[0]
+	if result.OK || !strings.Contains(result.Message, "注释或尾逗号") {
+		t.Fatalf("result = %#v", result)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || !reflect.DeepEqual(data, original) {
+		t.Fatalf("config changed: %q, err=%v", data, err)
+	}
+}
+
+func TestRemoveOpenCodeStandardJSONWithoutInstalledCLI(t *testing.T) {
+	manager := testManager(t, func(string) (string, error) { return "", errors.New("not found") }, nil)
+	path := manager.configPaths("opencode")[2]
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"mcp":{"other":{"type":"remote","url":"https://example.com"},"ssh-mcp":{"type":"remote","url":"`+testServerURL+`"}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before := findTool(t, manager.Detect(), "opencode")
+	if before.Installed || !before.Present || before.ConfigPath != path {
+		t.Fatalf("unexpected state before removal: %#v", before)
+	}
+	result := manager.Remove(context.Background(), []string{"opencode"})[0]
+	if !result.OK {
+		t.Fatalf("result = %#v", result)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), serverName) || !strings.Contains(string(data), "other") {
+		t.Fatalf("unexpected OpenCode config: %s", data)
 	}
 }
 

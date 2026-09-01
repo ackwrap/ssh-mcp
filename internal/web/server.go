@@ -100,6 +100,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/import", s.handle(s.importConfig))
 	s.mux.HandleFunc("GET /api/integrations", s.handle(s.listIntegrations))
 	s.mux.HandleFunc("POST /api/integrations/configure", s.handle(s.configureIntegrations))
+	s.mux.HandleFunc("POST /api/integrations/remove", s.handle(s.removeIntegrations))
 	s.mux.HandleFunc("GET /api/health", s.handle(s.health))
 
 	mcpServer := mcpserver.NewServer(s.runtime)

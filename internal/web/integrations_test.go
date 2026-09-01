@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -84,9 +85,57 @@ func TestIntegrationAPIRequiresAuthAndUsesAllowlistedCommand(t *testing.T) {
 	if !results[0].(map[string]any)["ok"].(bool) {
 		t.Fatalf("result = %#v", results[0])
 	}
-	want := []string{`C:\bin\opencode.exe`, "mcp", "add", "ssh-mcp", "--url", "http://127.0.0.1:18877/mcp/"}
+	want := []string{`C:\bin\opencode.exe`, "mcp", "add", "ssh-mcp", "--", `C:\Program Files\SSH-MCP\ssh-mcp.exe`}
 	if len(calls) != 1 || !reflect.DeepEqual(calls[0], want) {
 		t.Fatalf("calls = %#v", calls)
+	}
+}
+
+func TestRemoveIntegrationAPIRequiresAuthAndPreservesOtherConfig(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("LOCALAPPDATA", dataDir)
+	home := filepath.Join(dataDir, "home")
+	app, err := NewServer(nil, mcpserver.NewRuntime())
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager, err := integration.NewManager(integration.Options{
+		ServerCommand: []string{`C:\Program Files\SSH-MCP\ssh-mcp.exe`},
+		ServerURL:     "http://127.0.0.1:18877/mcp/",
+		HomeDir:       home,
+		AppData:       filepath.Join(dataDir, "appdata"),
+		LocalAppData:  filepath.Join(dataDir, "localappdata"),
+		Getenv:        func(string) string { return "" },
+		LookPath:      func(string) (string, error) { return "", errors.New("not found") },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	app.integrations = manager
+	configPath := filepath.Join(home, ".kimi", "mcp.json")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte(`{"mcpServers":{"other":{"command":"other"},"ssh-mcp":{"url":"http://127.0.0.1:8877/mcp/"}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	httpServer := httptest.NewServer(app.Handler())
+	defer httpServer.Close()
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	requestJSON(t, client, http.MethodPost, httpServer.URL+"/api/integrations/remove", map[string]any{"tools": []string{"kimi-code"}}, http.StatusUnauthorized)
+	requestJSON(t, client, http.MethodPost, httpServer.URL+"/api/auth/setup", map[string]any{"password": "master123"}, http.StatusOK)
+	requestJSON(t, client, http.MethodPost, httpServer.URL+"/api/integrations/remove", map[string]any{"tools": []string{"kimi-code"}, "command": "evil.exe"}, http.StatusBadRequest)
+	removed := requestJSON(t, client, http.MethodPost, httpServer.URL+"/api/integrations/remove", map[string]any{"tools": []string{"kimi-code"}}, http.StatusOK)
+	if !removed["results"].([]any)[0].(map[string]any)["ok"].(bool) {
+		t.Fatalf("result = %#v", removed)
+	}
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "ssh-mcp") || !strings.Contains(string(data), "other") {
+		t.Fatalf("unexpected config after removal: %s", data)
 	}
 }
 

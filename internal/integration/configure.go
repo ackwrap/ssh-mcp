@@ -55,14 +55,15 @@ func (m *Manager) Configure(ctx context.Context, ids []string) []Result {
 func (m *Manager) configureOne(ctx context.Context, item descriptor, info ToolInfo) (string, error) {
 	switch item.configKind {
 	case "opencode":
-		return m.configureCLI(ctx, item, info, nil, []string{"mcp", "add", serverName, "--url", m.serverURL})
+		add := append([]string{"mcp", "add", serverName, "--"}, m.serverCommand...)
+		return m.configureCLI(ctx, item, info, nil, add)
 	case "claude":
 		remove := []string{"mcp", "remove", "--scope", "user", serverName}
-		add := []string{"mcp", "add", "--transport", "http", "--scope", "user", serverName, m.serverURL}
+		add := append([]string{"mcp", "add", "--scope", "user", serverName, "--"}, m.serverCommand...)
 		return m.configureCLI(ctx, item, info, remove, add)
 	case "codex":
 		remove := []string{"mcp", "remove", serverName}
-		add := []string{"mcp", "add", serverName, "--url", m.serverURL}
+		add := append([]string{"mcp", "add", serverName, "--"}, m.serverCommand...)
 		return m.configureCLI(ctx, item, info, remove, add)
 	case "standard", "vscode":
 		return mergeJSONConfig(info.ConfigPath, item.rootPath, m.configEntry(item))
@@ -72,22 +73,14 @@ func (m *Manager) configureOne(ctx context.Context, item descriptor, info ToolIn
 }
 
 func (m *Manager) configEntry(item descriptor) map[string]any {
-	switch item.id {
-	case "kimi-code":
-		return map[string]any{"transport": "http", "url": m.serverURL}
-	case "zcode":
-		return map[string]any{"type": "http", "url": m.serverURL}
-	case "cursor":
-		return map[string]any{"url": m.serverURL}
-	case "vscode":
-		return map[string]any{"type": "http", "url": m.serverURL}
-	default:
-		entry := map[string]any{"command": m.serverCommand[0]}
-		if len(m.serverCommand) > 1 {
-			entry["args"] = m.serverCommand[1:]
-		}
-		return entry
+	entry := map[string]any{"command": m.serverCommand[0]}
+	if len(m.serverCommand) > 1 {
+		entry["args"] = m.serverCommand[1:]
 	}
+	if item.id == "zcode" || item.id == "vscode" {
+		entry["type"] = "stdio"
+	}
+	return entry
 }
 
 func (m *Manager) configureCLI(ctx context.Context, item descriptor, info ToolInfo, remove, add []string) (string, error) {

@@ -8,7 +8,7 @@ import (
 
 func TestCLIFlags(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"--version"}, &stdout, &stderr); code != 0 || strings.TrimSpace(stdout.String()) != "ssh-mcp 0.1.2" {
+	if code := run([]string{"--version"}, &stdout, &stderr); code != 0 || strings.TrimSpace(stdout.String()) != "ssh-mcp 0.1.3" {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 	stdout.Reset()

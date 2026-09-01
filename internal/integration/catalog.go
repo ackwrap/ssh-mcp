@@ -23,14 +23,14 @@ type descriptor struct {
 
 func toolDescriptors() []descriptor {
 	return []descriptor{
-		{id: "opencode", name: "OpenCode", commands: []string{"opencode"}, method: "官方 CLI", note: "优先直接启动 Scoop 或 npm 安装的真实 OpenCode，不经过 shim。", restartHint: "请完全退出并重新启动 OpenCode", configKind: "opencode", transport: "Streamable HTTP", commandPaths: opencodeCommandPaths},
-		{id: "claude-code", name: "Claude Code", commands: []string{"claude"}, method: "官方 CLI", note: "使用 user scope 配置，不修改项目级 .mcp.json。", restartHint: "请重新启动 Claude Code", configKind: "claude", transport: "Streamable HTTP"},
-		{id: "codex", name: "OpenAI Codex", commands: []string{"codex"}, method: "官方 CLI", note: "直接检测 npm 用户安装路径，并通过 codex mcp 管理 ~/.codex/config.toml。", restartHint: "请重新启动 Codex", configKind: "codex", transport: "Streamable HTTP", commandPaths: codexCommandPaths},
-		{id: "kimi-code", name: "Kimi Code CLI", commands: []string{"kimi"}, method: "配置文件", note: "写入用户级 ~/.kimi/mcp.json，不影响项目级配置。", restartHint: "请新建 Kimi Code 会话", configKind: "standard", rootPath: []string{"mcpServers"}, transport: "Streamable HTTP"},
-		{id: "zcode", name: "ZCode", commands: []string{"zcode"}, method: "配置文件", note: "写入 ~/.zcode/cli/config.json 的 mcp.servers。", restartHint: "请重新启动 ZCode", configKind: "standard", rootPath: []string{"mcp", "servers"}, transport: "Streamable HTTP"},
-		{id: "cursor", name: "Cursor", commands: []string{"cursor"}, method: "配置文件", note: "写入用户级 ~/.cursor/mcp.json。", restartHint: "请重新启动 Cursor 或刷新 MCP", configKind: "standard", rootPath: []string{"mcpServers"}, transport: "Streamable HTTP", installPaths: cursorInstallPaths},
-		{id: "vscode", name: "Visual Studio Code", commands: []string{"code"}, method: "配置文件", note: "写入用户级 mcp.json 的 servers。", restartHint: "请在 VS Code 中刷新 MCP 服务器", configKind: "vscode", rootPath: []string{"servers"}, transport: "Streamable HTTP", installPaths: vscodeInstallPaths},
-		{id: "claude-desktop", name: "Claude Desktop", commands: []string{"claude-desktop"}, method: "配置文件", note: "Claude Desktop 配置文件使用本机 stdio 回退。", restartHint: "请完全退出并重新启动 Claude Desktop", configKind: "standard", rootPath: []string{"mcpServers"}, transport: "stdio", installPaths: claudeDesktopInstallPaths},
+		{id: "opencode", name: "OpenCode", commands: []string{"opencode"}, method: "官方 CLI", note: "优先直接启动 Scoop 或 npm 安装的真实 OpenCode，不经过 shim。", restartHint: "请完全退出并重新启动 OpenCode", configKind: "opencode", transport: "stdio", commandPaths: opencodeCommandPaths},
+		{id: "claude-code", name: "Claude Code", commands: []string{"claude"}, method: "官方 CLI", note: "使用 user scope 配置，不修改项目级 .mcp.json。", restartHint: "请重新启动 Claude Code", configKind: "claude", transport: "stdio"},
+		{id: "codex", name: "OpenAI Codex", commands: []string{"codex"}, method: "官方 CLI", note: "直接检测 npm 用户安装路径，并通过 codex mcp 管理 ~/.codex/config.toml。", restartHint: "请重新启动 Codex", configKind: "codex", transport: "stdio", commandPaths: codexCommandPaths},
+		{id: "kimi-code", name: "Kimi Code CLI", commands: []string{"kimi"}, method: "配置文件", note: "写入用户级 ~/.kimi/mcp.json，不影响项目级配置。", restartHint: "请新建 Kimi Code 会话", configKind: "standard", rootPath: []string{"mcpServers"}, transport: "stdio"},
+		{id: "zcode", name: "ZCode", commands: []string{"zcode"}, method: "配置文件", note: "写入 ~/.zcode/cli/config.json 的 mcp.servers。", restartHint: "请重新启动 ZCode", configKind: "standard", rootPath: []string{"mcp", "servers"}, transport: "stdio"},
+		{id: "cursor", name: "Cursor", commands: []string{"cursor"}, method: "配置文件", note: "写入用户级 ~/.cursor/mcp.json。", restartHint: "请重新启动 Cursor 或刷新 MCP", configKind: "standard", rootPath: []string{"mcpServers"}, transport: "stdio", installPaths: cursorInstallPaths},
+		{id: "vscode", name: "Visual Studio Code", commands: []string{"code"}, method: "配置文件", note: "写入用户级 mcp.json 的 servers。", restartHint: "请在 VS Code 中刷新 MCP 服务器", configKind: "vscode", rootPath: []string{"servers"}, transport: "stdio", installPaths: vscodeInstallPaths},
+		{id: "claude-desktop", name: "Claude Desktop", commands: []string{"claude-desktop"}, method: "配置文件", note: "写入 Claude Desktop 用户级 stdio 配置。", restartHint: "请完全退出并重新启动 Claude Desktop", configKind: "standard", rootPath: []string{"mcpServers"}, transport: "stdio", installPaths: claudeDesktopInstallPaths},
 	}
 }
 
@@ -61,6 +61,9 @@ func (m *Manager) detect(item descriptor) ToolInfo {
 		writePaths = paths[:2]
 	}
 	configPath := firstExisting(writePaths)
+	if configPath == "" {
+		configPath = firstExisting(paths)
+	}
 	if configPath == "" && len(paths) > 0 {
 		configPath = writePaths[0]
 	}
@@ -68,14 +71,13 @@ func (m *Manager) detect(item descriptor) ToolInfo {
 	if !installed && item.installPaths != nil {
 		installed = anyExists(item.installPaths(m))
 	}
-	if !installed && (item.id == "kimi-code" || item.id == "zcode" || item.id == "claude-desktop") {
-		installed = anyExists(paths)
-	}
+	present, configured := m.configurationState(item, paths)
 	return ToolInfo{
 		ID:          item.id,
 		Name:        item.name,
 		Installed:   installed,
-		Configured:  m.configured(item, paths),
+		Present:     present,
+		Configured:  configured,
 		CommandPath: commandPath,
 		ConfigPath:  configPath,
 		Method:      item.method,
@@ -147,15 +149,21 @@ func (m *Manager) configPaths(id string) []string {
 	}
 }
 
-func (m *Manager) configured(item descriptor, paths []string) bool {
+func (m *Manager) configurationState(item descriptor, paths []string) (bool, bool) {
 	if item.configKind == "codex" {
+		present := false
 		for _, path := range paths {
 			data, err := os.ReadFile(path)
-			if err == nil && codexHTTPConfigured(data, m.serverURL) {
-				return true
+			if err != nil {
+				continue
+			}
+			found, configured := codexConfigState(data, m.serverCommand)
+			present = present || found
+			if configured {
+				return true, true
 			}
 		}
-		return false
+		return present, false
 	}
 	rootPath := item.rootPath
 	if item.configKind == "opencode" {
@@ -163,18 +171,24 @@ func (m *Manager) configured(item descriptor, paths []string) bool {
 	} else if item.configKind == "claude" {
 		rootPath = []string{"mcpServers"}
 	}
+	present := false
 	for _, path := range paths {
 		root, err := readJSONObject(path)
 		if err != nil {
 			continue
 		}
 		entries, _ := objectAtPath(root, rootPath)
-		entry, _ := entries[serverName].(map[string]any)
+		value, exists := entries[serverName]
+		if !exists {
+			continue
+		}
+		present = true
+		entry, _ := value.(map[string]any)
 		if m.entryConfigured(item, entry) {
-			return true
+			return true, true
 		}
 	}
-	return false
+	return present, false
 }
 
 func (m *Manager) entryConfigured(item descriptor, entry map[string]any) bool {
@@ -183,39 +197,45 @@ func (m *Manager) entryConfigured(item descriptor, entry map[string]any) bool {
 	}
 	switch item.id {
 	case "opencode":
-		return entry["type"] == "remote" && entry["url"] == m.serverURL
-	case "claude-code":
-		transport := entry["type"]
-		return (transport == "http" || transport == "streamable-http") && entry["url"] == m.serverURL
-	case "kimi-code":
-		return entry["transport"] == "http" && entry["url"] == m.serverURL
+		command, _ := entry["command"].([]any)
+		return entry["type"] == "local" && commandMatches(command, m.serverCommand)
 	case "zcode", "vscode":
-		return entry["type"] == "http" && entry["url"] == m.serverURL
-	case "claude-desktop":
-		command, _ := entry["command"].(string)
-		if command != m.serverCommand[0] {
-			return false
-		}
-		args, _ := entry["args"].([]any)
-		if len(args) != len(m.serverCommand)-1 {
-			return false
-		}
-		for index, expected := range m.serverCommand[1:] {
-			if args[index] != expected {
-				return false
-			}
-		}
-		return true
+		return entry["type"] == "stdio" && stdioEntryMatches(entry, m.serverCommand)
 	default:
-		return entry["url"] == m.serverURL
+		return stdioEntryMatches(entry, m.serverCommand)
 	}
 }
 
-func codexHTTPConfigured(data []byte, serverURL string) bool {
+func stdioEntryMatches(entry map[string]any, command []string) bool {
+	executable, _ := entry["command"].(string)
+	if len(command) == 0 || executable != command[0] {
+		return false
+	}
+	args, _ := entry["args"].([]any)
+	return commandMatches(args, command[1:])
+}
+
+func commandMatches(actual []any, expected []string) bool {
+	if len(actual) != len(expected) {
+		return false
+	}
+	for index, value := range expected {
+		if actual[index] != value {
+			return false
+		}
+	}
+	return true
+}
+
+func codexConfigState(data []byte, command []string) (bool, bool) {
 	inServerSection := false
+	values := map[string]string{}
 	for _, line := range strings.Split(string(data), "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "[") {
+			if inServerSection {
+				break
+			}
 			header := strings.TrimSpace(strings.SplitN(trimmed, "#", 2)[0])
 			inServerSection = codexSection.MatchString(header)
 			continue
@@ -224,15 +244,84 @@ func codexHTTPConfigured(data []byte, serverURL string) bool {
 			continue
 		}
 		key, value, ok := strings.Cut(trimmed, "=")
-		if !ok || strings.TrimSpace(key) != "url" {
-			continue
-		}
-		parsed, ok := parseTOMLString(strings.TrimSpace(value))
-		if ok && parsed == serverURL {
-			return true
+		if ok {
+			values[strings.TrimSpace(key)] = strings.TrimSpace(value)
 		}
 	}
-	return false
+	if !inServerSection && len(values) == 0 {
+		return false, false
+	}
+	executable, ok := parseTOMLString(values["command"])
+	if !ok || len(command) == 0 || executable != command[0] {
+		return true, false
+	}
+	args, ok := parseTOMLStringArray(values["args"])
+	if values["args"] == "" {
+		args, ok = nil, true
+	}
+	if !ok || len(args) != len(command)-1 {
+		return true, false
+	}
+	for index, expected := range command[1:] {
+		if args[index] != expected {
+			return true, false
+		}
+	}
+	return true, true
+}
+
+func parseTOMLStringArray(value string) ([]string, bool) {
+	value = strings.TrimSpace(strings.SplitN(value, "#", 2)[0])
+	if value == "[]" {
+		return nil, true
+	}
+	if len(value) < 2 || value[0] != '[' || value[len(value)-1] != ']' {
+		return nil, false
+	}
+	var result []string
+	remaining := strings.TrimSpace(value[1 : len(value)-1])
+	for remaining != "" {
+		if remaining[0] != '"' && remaining[0] != '\'' {
+			return nil, false
+		}
+		end := tomlStringEnd(remaining)
+		if end < 0 {
+			return nil, false
+		}
+		parsed, ok := parseTOMLString(remaining[:end+1])
+		if !ok {
+			return nil, false
+		}
+		result = append(result, parsed)
+		remaining = strings.TrimSpace(remaining[end+1:])
+		if remaining == "" {
+			break
+		}
+		if remaining[0] != ',' {
+			return nil, false
+		}
+		remaining = strings.TrimSpace(remaining[1:])
+	}
+	return result, true
+}
+
+func tomlStringEnd(value string) int {
+	quote := value[0]
+	escaped := false
+	for index := 1; index < len(value); index++ {
+		if quote == '"' && escaped {
+			escaped = false
+			continue
+		}
+		if quote == '"' && value[index] == '\\' {
+			escaped = true
+			continue
+		}
+		if value[index] == quote {
+			return index
+		}
+	}
+	return -1
 }
 
 func parseTOMLString(value string) (string, bool) {

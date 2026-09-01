@@ -2,7 +2,7 @@
 
 这是 `C:\Users\xiaobai\Desktop\ssh_mcp` 的原生 Go 迁移版。功能、WebUI API、MCP 工具名和本地数据目录保持兼容，不再需要 Python、uv 或 PyInstaller。
 
-当前版本：**0.1.2**。
+当前版本：**0.1.3**。
 
 完整使用说明见 [`USAGE.md`](USAGE.md)，项目维护约定见 [`AGENTS.md`](AGENTS.md)。
 
@@ -12,7 +12,7 @@
 - 原 WebUI 前端直接复用并嵌入单个可执行文件
 - 主密码登录、锁定、改密、忘记密码、会话撤销
 - 服务器和跳板机增删改查、复制、导入导出
-- 自动检测 OpenCode、Claude Code、Codex、Kimi Code、ZCode、Cursor、VS Code 和 Claude Desktop，优先通过本机 Streamable HTTP 一键接入
+- 自动检测 OpenCode、Claude Code、Codex、Kimi Code、ZCode、Cursor、VS Code 和 Claude Desktop，通过独立 stdio 子进程一键接入或取消接入
 - 直连、链式多跳板、SOCKS5、HTTP CONNECT
 - 密码、粘贴私钥、私钥文件及私钥口令认证
 - 命令执行、批量执行、连接测试和 SFTP 文件操作
@@ -57,7 +57,7 @@ go run . --open
 
 ```text
 dist\ssh-mcp.exe
-dist\installer\SSH-MCP-Setup-0.1.2.exe
+dist\installer\SSH-MCP-Setup-0.1.3.exe
 ```
 
 只构建应用、不编译安装包：

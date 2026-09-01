@@ -74,6 +74,77 @@ func mergeJSONConfig(path string, rootPath []string, entry map[string]any) (stri
 	return backup, nil
 }
 
+type jsonRemoval struct {
+	snapshot fileSnapshot
+	data     []byte
+}
+
+func removeJSONConfigs(paths []string, rootPath []string) (string, bool, error) {
+	if len(rootPath) == 0 {
+		return "", false, errors.New("配置字段路径不能为空")
+	}
+	removals := make([]jsonRemoval, 0, len(paths))
+	for _, path := range paths {
+		snapshot, err := captureFile(path)
+		if err != nil {
+			return "", false, err
+		}
+		if !snapshot.exists || len(bytes.TrimSpace(snapshot.data)) == 0 {
+			continue
+		}
+		root, err := decodeJSONObject(snapshot.data)
+		if err != nil {
+			return "", false, fmt.Errorf("配置文件不是有效的 JSON/JSONC，未修改 %s: %w", path, err)
+		}
+		entries, ok := objectAtPath(root, rootPath)
+		if !ok {
+			continue
+		}
+		if _, exists := entries[serverName]; !exists {
+			continue
+		}
+		clean := removeTrailingCommas(stripJSONComments(snapshot.data))
+		if !bytes.Equal(clean, snapshot.data) {
+			return "", false, fmt.Errorf("配置文件包含注释或尾逗号，为避免破坏原格式未修改 %s", path)
+		}
+		delete(entries, serverName)
+		data, err := json.MarshalIndent(root, "", "  ")
+		if err != nil {
+			return "", false, err
+		}
+		removals = append(removals, jsonRemoval{snapshot: snapshot, data: append(data, '\n')})
+	}
+	if len(removals) == 0 {
+		return "", false, nil
+	}
+	if len(removals) > 1 {
+		return "", false, errors.New("多个配置文件同时包含 ssh-mcp，为避免跨文件覆盖未自动删除，请先保留一个有效配置")
+	}
+	snapshots := make([]fileSnapshot, 0, len(removals))
+	for _, removal := range removals {
+		snapshots = append(snapshots, removal.snapshot)
+	}
+	backup, err := writeBackups(snapshots)
+	if err != nil {
+		return backup, false, err
+	}
+	for _, snapshot := range snapshots {
+		unchanged, err := snapshot.unchanged()
+		if err != nil {
+			return backup, false, fmt.Errorf("重新检查配置失败: %w", err)
+		}
+		if !unchanged {
+			return backup, false, errors.New("配置已被其他进程更新，请刷新检测后重试")
+		}
+	}
+	for _, removal := range removals {
+		if err := atomicWrite(removal.snapshot.path, removal.data, removal.snapshot.mode); err != nil {
+			return backup, false, fmt.Errorf("移除配置失败，原文件未替换: %w", err)
+		}
+	}
+	return backup, true, nil
+}
+
 type fileSnapshot struct {
 	path   string
 	exists bool

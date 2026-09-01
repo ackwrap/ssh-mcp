@@ -18,6 +18,7 @@ type ToolInfo struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Installed   bool   `json:"installed"`
+	Present     bool   `json:"present"`
 	Configured  bool   `json:"configured"`
 	CommandPath string `json:"command_path"`
 	ConfigPath  string `json:"config_path"`

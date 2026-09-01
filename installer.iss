@@ -3,7 +3,7 @@
 
 #define MyAppName "SSH-MCP"
 #ifndef MyAppVersion
-  #define MyAppVersion "0.1.2"
+  #define MyAppVersion "0.1.3"
 #endif
 #define MyAppPublisher "SSH-MCP contributors"
 #define MyAppExeName "ssh-mcp.exe"
@@ -28,6 +28,7 @@ SolidCompression=yes
 PrivilegesRequired=lowest
 WizardStyle=modern
 LicenseFile=LICENSE
+SetupIconFile=internal\tray\icon.ico
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 AppMutex=Local\SSH-MCP-Singleton

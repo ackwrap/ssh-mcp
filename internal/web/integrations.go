@@ -58,20 +58,40 @@ func (s *Server) configureIntegrations(w http.ResponseWriter, r *http.Request) e
 	if err := s.requireAuth(r); err != nil {
 		return err
 	}
+	tools, err := integrationTools(r)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"results": s.integrations.Configure(r.Context(), tools)})
+	return nil
+}
+
+func (s *Server) removeIntegrations(w http.ResponseWriter, r *http.Request) error {
+	if err := s.requireAuth(r); err != nil {
+		return err
+	}
+	tools, err := integrationTools(r)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"results": s.integrations.Remove(r.Context(), tools)})
+	return nil
+}
+
+func integrationTools(r *http.Request) ([]string, error) {
 	var input struct {
 		Tools []string `json:"tools"`
 	}
 	if err := decodeIntegrationRequest(r, &input); err != nil {
-		return err
+		return nil, err
 	}
 	if len(input.Tools) == 0 {
-		return errors.New("请至少选择一个已安装的 AI 工具")
+		return nil, errors.New("请至少选择一个 AI 工具")
 	}
 	if len(input.Tools) > 16 {
-		return errors.New("一次最多配置 16 个 AI 工具")
+		return nil, errors.New("一次最多操作 16 个 AI 工具")
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"results": s.integrations.Configure(r.Context(), input.Tools)})
-	return nil
+	return input.Tools, nil
 }
 
 func decodeIntegrationRequest(r *http.Request, target any) error {

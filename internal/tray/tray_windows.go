@@ -3,9 +3,8 @@
 package tray
 
 import (
-	"bytes"
 	"context"
-	"encoding/binary"
+	_ "embed"
 	"errors"
 	"fmt"
 	"net/http"
@@ -28,6 +27,9 @@ const (
 )
 
 var singleton windows.Handle
+
+//go:embed icon.ico
+var appIcon []byte
 
 type service struct {
 	mu      sync.Mutex
@@ -62,7 +64,7 @@ func Run(openWebUI bool) error {
 	}
 
 	systray.Run(func() {
-		systray.SetIcon(iconICO())
+		systray.SetIcon(appIcon)
 		systray.SetTitle("SSH-MCP")
 		systray.SetTooltip("SSH-MCP")
 		openItem := systray.AddMenuItem("打开 WebUI", "打开本地管理页面")
@@ -210,45 +212,4 @@ func setAutostart(enabled bool) error {
 		return err
 	}
 	return key.SetStringValue(runValue, `"`+executable+`" --tray`)
-}
-
-func iconICO() []byte {
-	const size = 32
-	pixels := make([]byte, size*size*4)
-	for y := 0; y < size; y++ {
-		for x := 0; x < size; x++ {
-			offset := ((size-1-y)*size + x) * 4
-			b, g, r, a := byte(33), byte(26), byte(23), byte(255)
-			if y < 4 {
-				b, g, r = 255, 139, 61
-			}
-			if y >= 24 && y <= 27 && x >= 9 && x <= 22 {
-				b, g, r = 142, 207, 62
-			}
-			pixels[offset], pixels[offset+1], pixels[offset+2], pixels[offset+3] = b, g, r, a
-		}
-	}
-	mask := make([]byte, size*size/8)
-	imageSize := 40 + len(pixels) + len(mask)
-	var output bytes.Buffer
-	_ = binary.Write(&output, binary.LittleEndian, []uint16{0, 1, 1})
-	output.Write([]byte{size, size, 0, 0})
-	_ = binary.Write(&output, binary.LittleEndian, uint16(1))
-	_ = binary.Write(&output, binary.LittleEndian, uint16(32))
-	_ = binary.Write(&output, binary.LittleEndian, uint32(imageSize))
-	_ = binary.Write(&output, binary.LittleEndian, uint32(22))
-	_ = binary.Write(&output, binary.LittleEndian, uint32(40))
-	_ = binary.Write(&output, binary.LittleEndian, int32(size))
-	_ = binary.Write(&output, binary.LittleEndian, int32(size*2))
-	_ = binary.Write(&output, binary.LittleEndian, uint16(1))
-	_ = binary.Write(&output, binary.LittleEndian, uint16(32))
-	_ = binary.Write(&output, binary.LittleEndian, uint32(0))
-	_ = binary.Write(&output, binary.LittleEndian, uint32(len(pixels)))
-	_ = binary.Write(&output, binary.LittleEndian, int32(0))
-	_ = binary.Write(&output, binary.LittleEndian, int32(0))
-	_ = binary.Write(&output, binary.LittleEndian, uint32(0))
-	_ = binary.Write(&output, binary.LittleEndian, uint32(0))
-	output.Write(pixels)
-	output.Write(mask)
-	return output.Bytes()
 }

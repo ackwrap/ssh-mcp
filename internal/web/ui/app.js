@@ -9,6 +9,7 @@ const state = {
   authenticated: false,
   integrationTools: [],
   integrationResults: [],
+  integrationResultTitle: "接入结果",
   integrationsLoading: false,
 };
 

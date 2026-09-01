@@ -19,7 +19,12 @@ func newIntegrationManager() (*integration.Manager, error) {
 	if err != nil {
 		return nil, err
 	}
-	return integration.NewManager(integration.Options{ServerCommand: command})
+	port, err := GetPort()
+	if err != nil {
+		return nil, err
+	}
+	endpoint := fmt.Sprintf("http://127.0.0.1:%d/mcp/", port)
+	return integration.NewManager(integration.Options{ServerCommand: command, ServerURL: endpoint})
 }
 
 func integrationServerCommand() ([]string, error) {
@@ -27,10 +32,10 @@ func integrationServerCommand() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	command := []string{executable, "--mcp"}
+	command := []string{executable}
 	if strings.Contains(filepath.Clean(executable), string(filepath.Separator)+"go-build") {
 		if cwd, cwdErr := os.Getwd(); cwdErr == nil {
-			command = []string{"go", "-C", cwd, "run", ".", "--mcp"}
+			command = []string{"go", "-C", cwd, "run", "."}
 		}
 	}
 	return command, nil
@@ -43,6 +48,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) error 
 	command := s.integrations.ServerCommand()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"executable": strings.Join(command, " "),
+		"endpoint":   s.integrations.ServerURL(),
 		"tools":      s.integrations.Detect(),
 	})
 	return nil

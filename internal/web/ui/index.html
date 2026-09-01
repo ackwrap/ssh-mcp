@@ -85,8 +85,8 @@
         <h2>AI 工具接入</h2>
         <button class="btn" id="btn-refresh-integrations">刷新检测</button>
       </div>
-      <p class="hint">自动检测本机已安装的 AI 工具，并将 SSH-MCP 写入所选工具的配置。无需手动输入命令或路径。</p>
-      <div class="integration-executable">当前可执行程序：<code id="integration-exe">检测中…</code></div>
+      <p class="hint">自动检测本机已安装的 AI 工具，并优先通过托盘提供的本机 Streamable HTTP 服务接入。相同配置已存在时会直接跳过。</p>
+      <div class="integration-executable">MCP HTTP 地址：<code id="integration-exe">检测中…</code></div>
       <div class="integration-toolbar">
         <button class="btn" id="btn-select-installed" disabled>全选已安装</button>
         <span id="integration-selection" class="hint">尚未选择工具</span>

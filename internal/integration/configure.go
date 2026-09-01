@@ -27,9 +27,15 @@ func (m *Manager) Configure(ctx context.Context, ids []string) []Result {
 			continue
 		}
 		info := m.detect(item)
-		result := Result{ID: item.id, Name: item.name, ConfigPath: info.ConfigPath}
+		result := Result{ID: item.id, Name: item.name, ConfigPath: info.ConfigPath, Transport: item.transport}
 		if !info.Installed {
 			result.Message = "未检测到该工具，未修改任何配置"
+			results = append(results, result)
+			continue
+		}
+		if info.Configured {
+			result.OK = true
+			result.Message = "已存在相同的 " + item.transport + " ssh-mcp 配置，已跳过"
 			results = append(results, result)
 			continue
 		}
@@ -39,7 +45,7 @@ func (m *Manager) Configure(ctx context.Context, ids []string) []Result {
 			result.Message = err.Error()
 		} else {
 			result.OK = true
-			result.Message = "已写入 ssh-mcp 配置；" + item.restartHint
+			result.Message = "已通过 " + item.transport + " 写入 ssh-mcp 配置；" + item.restartHint
 		}
 		results = append(results, result)
 	}
@@ -49,23 +55,38 @@ func (m *Manager) Configure(ctx context.Context, ids []string) []Result {
 func (m *Manager) configureOne(ctx context.Context, item descriptor, info ToolInfo) (string, error) {
 	switch item.configKind {
 	case "opencode":
-		return m.configureCLI(ctx, item, info, nil, append([]string{"mcp", "add", serverName, "--"}, m.serverCommand...))
+		return m.configureCLI(ctx, item, info, nil, []string{"mcp", "add", serverName, "--url", m.serverURL})
 	case "claude":
 		remove := []string{"mcp", "remove", "--scope", "user", serverName}
-		add := append([]string{"mcp", "add", "--scope", "user", serverName, "--"}, m.serverCommand...)
+		add := []string{"mcp", "add", "--transport", "http", "--scope", "user", serverName, m.serverURL}
 		return m.configureCLI(ctx, item, info, remove, add)
 	case "codex":
 		remove := []string{"mcp", "remove", serverName}
-		add := append([]string{"mcp", "add", serverName, "--"}, m.serverCommand...)
+		add := []string{"mcp", "add", serverName, "--url", m.serverURL}
 		return m.configureCLI(ctx, item, info, remove, add)
 	case "standard", "vscode":
-		entry := map[string]any{"command": m.serverCommand[0], "args": m.serverCommand[1:]}
-		if item.configKind == "vscode" {
-			entry["type"] = "stdio"
-		}
-		return mergeJSONConfig(info.ConfigPath, item.rootKey, entry)
+		return mergeJSONConfig(info.ConfigPath, item.rootPath, m.configEntry(item))
 	default:
 		return "", errors.New("该工具尚未实现配置适配器")
+	}
+}
+
+func (m *Manager) configEntry(item descriptor) map[string]any {
+	switch item.id {
+	case "kimi-code":
+		return map[string]any{"transport": "http", "url": m.serverURL}
+	case "zcode":
+		return map[string]any{"type": "http", "url": m.serverURL}
+	case "cursor":
+		return map[string]any{"url": m.serverURL}
+	case "vscode":
+		return map[string]any{"type": "http", "url": m.serverURL}
+	default:
+		entry := map[string]any{"command": m.serverCommand[0]}
+		if len(m.serverCommand) > 1 {
+			entry["args"] = m.serverCommand[1:]
+		}
+		return entry
 	}
 }
 
@@ -81,21 +102,14 @@ func (m *Manager) configureCLI(ctx context.Context, item descriptor, info ToolIn
 	if len(remove) > 0 {
 		_, _ = m.run(ctx, info.CommandPath, remove...)
 	}
-	_, err = m.run(ctx, info.CommandPath, add...)
+	output, err := m.run(ctx, info.CommandPath, add...)
 	if err != nil {
 		restoreErr := restoreSnapshots(snapshots)
-		message := safeCommandError(err)
+		message := safeCommandError(output, err)
 		if restoreErr != nil {
 			return backup, fmt.Errorf("%s 配置失败（%s），自动回滚也失败: %v；请从备份手动恢复", item.name, message, restoreErr)
 		}
 		return backup, fmt.Errorf("%s 配置失败（%s），原配置已恢复", item.name, message)
 	}
 	return backup, nil
-}
-
-func safeCommandError(err error) string {
-	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-		return "官方 CLI 执行超时或被取消"
-	}
-	return "官方 CLI 返回失败，详细输出已隐藏以避免泄露凭据"
 }

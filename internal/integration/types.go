@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +22,7 @@ type ToolInfo struct {
 	CommandPath string `json:"command_path"`
 	ConfigPath  string `json:"config_path"`
 	Method      string `json:"method"`
+	Transport   string `json:"transport"`
 	Note        string `json:"note"`
 	RestartHint string `json:"restart_hint"`
 }
@@ -32,10 +34,12 @@ type Result struct {
 	Message    string `json:"message"`
 	ConfigPath string `json:"config_path"`
 	BackupPath string `json:"backup_path,omitempty"`
+	Transport  string `json:"transport"`
 }
 
 type Options struct {
 	ServerCommand []string
+	ServerURL     string
 	HomeDir       string
 	AppData       string
 	LocalAppData  string
@@ -46,6 +50,7 @@ type Options struct {
 
 type Manager struct {
 	serverCommand []string
+	serverURL     string
 	homeDir       string
 	appData       string
 	localAppData  string
@@ -58,6 +63,14 @@ type Manager struct {
 func NewManager(options Options) (*Manager, error) {
 	if len(options.ServerCommand) == 0 || strings.TrimSpace(options.ServerCommand[0]) == "" {
 		return nil, errors.New("MCP 服务器启动命令不能为空")
+	}
+	serverURL := strings.TrimSpace(options.ServerURL)
+	if serverURL == "" {
+		serverURL = "http://127.0.0.1:8877/mcp/"
+	}
+	parsedURL, err := url.Parse(serverURL)
+	if err != nil || parsedURL.Scheme != "http" || parsedURL.Hostname() != "127.0.0.1" || parsedURL.User != nil {
+		return nil, errors.New("MCP HTTP 地址必须是 127.0.0.1 上的有效 HTTP URL")
 	}
 	home := options.HomeDir
 	if home == "" {
@@ -95,6 +108,7 @@ func NewManager(options Options) (*Manager, error) {
 	}
 	return &Manager{
 		serverCommand: append([]string(nil), options.ServerCommand...),
+		serverURL:     serverURL,
 		homeDir:       home,
 		appData:       appData,
 		localAppData:  localAppData,
@@ -107,3 +121,5 @@ func NewManager(options Options) (*Manager, error) {
 func (m *Manager) ServerCommand() []string {
 	return append([]string(nil), m.serverCommand...)
 }
+
+func (m *Manager) ServerURL() string { return m.serverURL }

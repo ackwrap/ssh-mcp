@@ -20,7 +20,7 @@
 推荐使用安装包：
 
 ```text
-C:\Users\xiaobai\Desktop\ssh-mcp2\dist\installer\SSH-MCP-Setup-0.1.0.exe
+C:\Users\xiaobai\Desktop\ssh-mcp2\dist\installer\SSH-MCP-Setup-0.1.2.exe
 ```
 
 运行安装包后，可以选择创建桌面快捷方式和登录 Windows 时自动启动托盘。开始菜单、桌面快捷方式及安装完成页都会使用 `ssh-mcp.exe --open`，因此启动应用时会同时打开 WebUI。
@@ -43,7 +43,7 @@ C:\Users\xiaobai\Desktop\ssh-mcp2\dist\ssh-mcp.exe
 
 ```text
 dist\ssh-mcp.exe
-dist\installer\SSH-MCP-Setup-0.1.0.exe
+dist\installer\SSH-MCP-Setup-0.1.2.exe
 ```
 
 仅构建免安装程序：
@@ -61,7 +61,7 @@ dist\installer\SSH-MCP-Setup-0.1.0.exe
 预期输出：
 
 ```text
-ssh-mcp 0.1.0
+ssh-mcp 0.1.2
 ```
 
 ## 3. 启动方式
@@ -233,16 +233,16 @@ WebUI 不再提供需要手动复制的“对接文档”页面。打开“AI �
 
 支持的工具：
 
-| 工具 | 检测方式 | 配置方式 |
-| --- | --- | --- |
-| OpenCode | `opencode` 命令 | 官方 `opencode mcp add`，保留 JSONC 注释 |
-| Claude Code | `claude` 命令 | 官方 `claude mcp add --scope user` |
-| OpenAI Codex | `codex` 命令 | 官方 `codex mcp add` |
-| Kimi Code CLI | `kimi` 命令 | 用户级 `~/.kimi-code/mcp.json` |
-| ZCode | `zcode` 命令或配置文件 | `~/.zcode/cli/config.json` |
-| Cursor | `cursor` 命令或应用路径 | `~/.cursor/mcp.json` |
-| Visual Studio Code | `code` 命令或应用路径 | 用户级 `mcp.json` |
-| Claude Desktop | 应用路径或现有配置 | `claude_desktop_config.json` |
+| 工具 | 检测方式 | 配置方式 | 传输方式 |
+| --- | --- | --- | --- |
+| OpenCode | `opencode` 命令 | 官方 `opencode mcp add --url`，保留 JSONC 注释 | Streamable HTTP |
+| Claude Code | `claude` 命令 | 官方 `claude mcp add --transport http --scope user` | Streamable HTTP |
+| OpenAI Codex | `codex` 命令 | 官方 `codex mcp add --url` | Streamable HTTP |
+| Kimi Code CLI | `kimi` 命令 | 用户级 `~/.kimi/mcp.json` | Streamable HTTP |
+| ZCode | `zcode` 命令或配置文件 | `~/.zcode/cli/config.json` 的 `mcp.servers` | Streamable HTTP |
+| Cursor | `cursor` 命令或应用路径 | `~/.cursor/mcp.json` | Streamable HTTP |
+| Visual Studio Code | `code` 命令或应用路径 | 用户级 `mcp.json` | Streamable HTTP |
+| Claude Desktop | 应用路径或现有配置 | `claude_desktop_config.json` | stdio 回退 |
 
 接入步骤：
 
@@ -254,11 +254,15 @@ WebUI 不再提供需要手动复制的“对接文档”页面。打开“AI �
 6. 查看每个工具的成功或失败结果。
 7. 按页面提示完全重启对应 AI 工具。
 
-一键接入只会执行内置的固定适配器，不接受浏览器传入的命令、可执行路径或任意参数。使用配置文件适配器时，程序会保留其他配置，并在原文件旁创建 `.ssh-mcp.bak` 备份；官方 CLI 配置失败时会恢复原文件。
+一键接入只会执行内置的固定适配器，不接受浏览器传入的命令、可执行路径或任意参数。检测到传输方式和地址均相同的 `ssh-mcp` 配置时会直接成功跳过，不执行 CLI，也不重复创建备份；旧 stdio 配置或不同地址仍会迁移到当前 HTTP 地址。使用配置文件适配器时，程序会保留其他配置，并在原文件旁创建 `.ssh-mcp.bak` 备份；官方 CLI 配置失败时会恢复原文件。
 
-OpenCode、Claude Code、Codex 使用各自官方 CLI 写入全局或用户级配置。Kimi Code、ZCode、Cursor、VS Code 和 Claude Desktop 使用其公开配置格式进行原子合并。
+官方 CLI 执行失败时，WebUI 会显示经过安全处理的原始错误详情：进程输出最多保留最新 64 KiB，ANSI 控制符和不可见字符会被移除，页面详情限制为 2000 个字符，API Key、token、密码、Authorization 和私钥内容会被替换为掩码。若 CLI 没有输出，页面会显示进程自身返回的错误。
 
-工具检测使用当前 Windows 用户的 `PATH`、`CODEX_HOME`、`KIMI_CODE_HOME` 等环境设置。只应接入你确认可信的本机工具安装；如果同名命令来自未知目录，应先修正 `PATH`。一键接入会在写入前再次比较文件内容，发现外部更新时拒绝覆盖并要求刷新重试；不要在接入过程中同时编辑同一个配置文件。
+Windows 上如果 `PATH` 命中 Scoop 生成的 `.exe` shim，程序会读取同目录标准 `.shim` 元数据，并通过 Windows 文件句柄确认最终目标仍位于同一个 Scoop 同名应用的 `apps` 目录后直接启动，避免无控制台的托盘进程触发 Scoop shim 创建进程失败。相对路径、网络路径、跨应用目标、缺失目标或异常大的元数据不会被采用。
+
+OpenCode、Claude Code、Codex 使用各自官方 CLI 写入全局或用户级 HTTP 配置。Kimi Code、ZCode、Cursor、VS Code 和 Claude Desktop 使用其公开配置格式进行原子合并。Claude Desktop 的配置文件接入缺少可靠的远程 HTTP 自动配置接口，因此继续使用本机 stdio 作为回退。
+
+工具检测使用当前 Windows 用户的 `PATH`、`CODEX_HOME`、`KIMI_SHARE_DIR` 等环境设置。只应接入你确认可信的本机工具安装；如果同名命令来自未知目录，应先修正 `PATH`。一键接入会在写入前再次比较文件内容，发现外部更新时拒绝覆盖并要求刷新重试；不要在接入过程中同时编辑同一个配置文件。
 
 OpenCode 通过官方 CLI 无损修改 JSONC。其他配置文件如果包含 JSONC 注释或尾逗号，一键接入会拒绝重写并保留原文件，避免丢失注释；此时可先将对应文件转换为标准 JSON 后重试。
 
@@ -268,7 +272,7 @@ OpenCode 通过官方 CLI 无损修改 JSONC。其他配置文件如果包含 JS
 http://127.0.0.1:8877/mcp/
 ```
 
-一键接入默认使用 stdio `ssh-mcp.exe --mcp`，因此每个客户端拥有独立 MCP 子进程；HTTP MCP 仍由唯一托盘实例提供。
+一键接入优先写入上面的本机 Streamable HTTP 地址；如果设置了 `SSH_MCP_PORT`，页面和配置会使用对应端口。使用 HTTP 接入期间必须保持 SSH-MCP 托盘运行。只有 Claude Desktop 当前使用无参数 stdio `ssh-mcp.exe` 回退并拥有独立 MCP 子进程；旧配置中的 `--mcp` 参数仍然兼容。
 
 ## 9. MCP 工具
 

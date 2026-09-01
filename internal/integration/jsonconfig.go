@@ -10,9 +10,13 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 )
 
-func mergeJSONConfig(path, rootKey string, entry map[string]any) (string, error) {
+func mergeJSONConfig(path string, rootPath []string, entry map[string]any) (string, error) {
+	if len(rootPath) == 0 {
+		return "", errors.New("配置字段路径不能为空")
+	}
 	snapshot, err := captureFile(path)
 	if err != nil {
 		return "", err
@@ -28,13 +32,17 @@ func mergeJSONConfig(path, rootKey string, entry map[string]any) (string, error)
 			return "", fmt.Errorf("配置文件不是有效的 JSON/JSONC，未修改 %s: %w", path, err)
 		}
 	}
-	entries, ok := root[rootKey].(map[string]any)
-	if !ok {
-		if root[rootKey] != nil {
-			return "", fmt.Errorf("配置字段 %s 不是对象，未修改 %s", rootKey, path)
+	entries := root
+	for index, key := range rootPath {
+		next, ok := entries[key].(map[string]any)
+		if !ok {
+			if entries[key] != nil {
+				return "", fmt.Errorf("配置字段 %s 不是对象，未修改 %s", strings.Join(rootPath[:index+1], "."), path)
+			}
+			next = map[string]any{}
+			entries[key] = next
 		}
-		entries = map[string]any{}
-		root[rootKey] = entries
+		entries = next
 	}
 	entries[serverName] = entry
 	data, err := json.MarshalIndent(root, "", "  ")

@@ -3,7 +3,7 @@
 
 #define MyAppName "SSH-MCP"
 #ifndef MyAppVersion
-  #define MyAppVersion "0.1.0"
+  #define MyAppVersion "0.1.2"
 #endif
 #define MyAppPublisher "SSH-MCP contributors"
 #define MyAppExeName "ssh-mcp.exe"

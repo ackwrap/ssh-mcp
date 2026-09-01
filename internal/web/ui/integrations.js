@@ -12,7 +12,7 @@ async function loadIntegrations(preserveResults = false) {
   try {
     const data = await api("/api/integrations");
     state.integrationTools = Array.isArray(data.tools) ? data.tools : [];
-    $("#integration-exe").textContent = data.executable || "未提供";
+    $("#integration-exe").textContent = data.endpoint || "未提供";
     renderIntegrations();
   } catch (ex) {
     state.integrationTools = [];
@@ -50,6 +50,7 @@ function renderIntegrations() {
         <span class="tag ${installed ? "green" : ""}">${installed ? "已安装" : "未安装"}</span>
         ${configured ? '<span class="tag green">已接入</span>' : '<span class="tag">未接入</span>'}
         ${tool.method ? `<span class="tag">${esc(tool.method)}</span>` : ""}
+        ${tool.transport ? `<span class="tag">${esc(tool.transport)}</span>` : ""}
       </div>
       <dl class="integration-details">
         <div><dt>命令路径</dt><dd><code>${esc(tool.command_path || "—")}</code></dd></div>
@@ -117,7 +118,7 @@ $("#btn-configure-integrations").addEventListener("click", async () => {
   const names = state.integrationTools
     .filter((tool) => tools.includes(String(tool.id)))
     .map((tool) => tool.name || tool.id);
-  if (!confirm(`将自动写入以下工具的配置：\n${names.join("、")}\n\n确认继续？`)) return;
+  if (!confirm(`将自动写入以下工具的配置：\n${names.join("、")}\n\n优先使用本机 Streamable HTTP；使用期间请保持 SSH-MCP 托盘运行。\n\n确认继续？`)) return;
   state.integrationsLoading = true;
   setIntegrationBusy(true);
   syncIntegrationSelection();

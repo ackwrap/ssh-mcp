@@ -11,11 +11,21 @@ import (
 	"testing"
 )
 
+const testServerURL = "http://127.0.0.1:18877/mcp/"
+
+func TestNewManagerRejectsNonLoopbackServerURL(t *testing.T) {
+	_, err := NewManager(Options{ServerCommand: []string{"ssh-mcp"}, ServerURL: "https://example.com/mcp/"})
+	if err == nil {
+		t.Fatal("non-loopback MCP URL was accepted")
+	}
+}
+
 func testManager(t *testing.T, lookPath func(string) (string, error), run func(context.Context, string, ...string) (string, error)) *Manager {
 	t.Helper()
 	home := t.TempDir()
 	manager, err := NewManager(Options{
-		ServerCommand: []string{`C:\Program Files\SSH-MCP\ssh-mcp.exe`, "--mcp"},
+		ServerCommand: []string{`C:\Program Files\SSH-MCP\ssh-mcp.exe`},
+		ServerURL:     testServerURL,
 		HomeDir:       home,
 		AppData:       filepath.Join(home, "AppData", "Roaming"),
 		LocalAppData:  filepath.Join(home, "AppData", "Local"),
@@ -43,7 +53,7 @@ func TestDetectInstalledAndConfiguredJSONC(t *testing.T) {
 	content := `{
   // Existing user comment
   "mcp": {
-    "ssh-mcp": {"type": "local", "command": ["old.exe", "--mcp"],},
+    "ssh-mcp": {"type": "remote", "url": "` + testServerURL + `",},
   },
 }`
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
@@ -56,6 +66,84 @@ func TestDetectInstalledAndConfiguredJSONC(t *testing.T) {
 	}
 	if findTool(t, tools, "codex").Installed {
 		t.Fatal("Codex should not be installed")
+	}
+	content = `{"mcp":{"ssh-mcp":{"type":"local","command":["old.exe","--mcp"]}}}`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if findTool(t, manager.Detect(), "opencode").Configured {
+		t.Fatal("legacy stdio OpenCode config should be upgraded to HTTP")
+	}
+}
+
+func TestDetectOpenCodePrefersDirectInstallOverPATHShim(t *testing.T) {
+	manager := testManager(t, func(name string) (string, error) {
+		if name == "opencode" {
+			return `C:\broken\scoop\shims\opencode.exe`, nil
+		}
+		return "", errors.New("not found")
+	}, nil)
+	direct := filepath.Join(manager.homeDir, "scoop", "apps", "opencode", "current", "opencode.exe")
+	if err := os.MkdirAll(filepath.Dir(direct), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(direct, []byte("opencode"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	tool := findTool(t, manager.Detect(), "opencode")
+	if tool.CommandPath != direct {
+		t.Fatalf("command path = %q, want direct install %q", tool.CommandPath, direct)
+	}
+}
+
+func TestDetectCodexFromKnownNPMPathWithoutPATH(t *testing.T) {
+	manager := testManager(t, func(string) (string, error) { return "", errors.New("not found") }, nil)
+	direct := filepath.Join(manager.homeDir, "scoop", "persist", "nodejs", "bin", "codex.cmd")
+	if err := os.MkdirAll(filepath.Dir(direct), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(direct, []byte("@echo off"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	tool := findTool(t, manager.Detect(), "codex")
+	if !tool.Installed || tool.CommandPath != direct {
+		t.Fatalf("Codex detection = %#v, want command %q", tool, direct)
+	}
+}
+
+func TestCodexConfiguredRequiresCurrentHTTPURL(t *testing.T) {
+	current := []byte("[mcp_servers.ssh-mcp] # SSH-MCP\nurl = \"" + testServerURL + "\" # local endpoint\n")
+	if !codexHTTPConfigured(current, testServerURL) {
+		t.Fatal("current Codex HTTP config was not detected")
+	}
+	legacy := []byte("[mcp_servers.ssh-mcp]\ncommand = \"ssh-mcp.exe\"\nargs = [\"--mcp\"]\n")
+	if codexHTTPConfigured(legacy, testServerURL) {
+		t.Fatal("legacy Codex stdio config should be upgraded to HTTP")
+	}
+}
+
+func TestDirectConfigDetectionRequiresMatchingTransport(t *testing.T) {
+	manager := testManager(t, func(string) (string, error) { return "", errors.New("not found") }, nil)
+	tests := []struct {
+		id       string
+		matching map[string]any
+		stale    map[string]any
+	}{
+		{id: "kimi-code", matching: map[string]any{"transport": "http", "url": testServerURL}, stale: map[string]any{"transport": "stdio", "url": testServerURL}},
+		{id: "zcode", matching: map[string]any{"type": "http", "url": testServerURL}, stale: map[string]any{"type": "sse", "url": testServerURL}},
+		{id: "vscode", matching: map[string]any{"type": "http", "url": testServerURL}, stale: map[string]any{"type": "stdio", "url": testServerURL}},
+		{id: "cursor", matching: map[string]any{"url": testServerURL}, stale: map[string]any{"url": "http://127.0.0.1:9999/mcp/"}},
+	}
+	for _, test := range tests {
+		t.Run(test.id, func(t *testing.T) {
+			item := descriptor{id: test.id}
+			if !manager.entryConfigured(item, test.matching) {
+				t.Fatalf("matching entry was not detected: %#v", test.matching)
+			}
+			if manager.entryConfigured(item, test.stale) {
+				t.Fatalf("stale entry was incorrectly accepted: %#v", test.stale)
+			}
+		})
 	}
 }
 
@@ -95,22 +183,23 @@ func TestConfigureKimiPreservesExistingConfigAndBacksUp(t *testing.T) {
 		t.Fatal("existing MCP server was removed")
 	}
 	sshMCP := servers[serverName].(map[string]any)
-	if sshMCP["command"] != manager.serverCommand[0] {
+	if sshMCP["url"] != testServerURL || sshMCP["transport"] != "http" {
 		t.Fatalf("ssh-mcp entry = %#v", sshMCP)
 	}
 }
 
 func TestDirectConfigAdaptersWriteExpectedRootShape(t *testing.T) {
 	tests := []struct {
-		id      string
-		command string
-		rootKey string
-		vscode  bool
+		id       string
+		command  string
+		rootPath []string
+		typeHTTP bool
+		stdio    bool
 	}{
-		{id: "zcode", command: "zcode", rootKey: "mcpServers"},
-		{id: "cursor", command: "cursor", rootKey: "mcpServers"},
-		{id: "vscode", command: "code", rootKey: "servers", vscode: true},
-		{id: "claude-desktop", command: "claude-desktop", rootKey: "mcpServers"},
+		{id: "zcode", command: "zcode", rootPath: []string{"mcp", "servers"}, typeHTTP: true},
+		{id: "cursor", command: "cursor", rootPath: []string{"mcpServers"}},
+		{id: "vscode", command: "code", rootPath: []string{"servers"}, typeHTTP: true},
+		{id: "claude-desktop", command: "claude-desktop", rootPath: []string{"mcpServers"}, stdio: true},
 	}
 	for _, test := range tests {
 		t.Run(test.id, func(t *testing.T) {
@@ -132,12 +221,23 @@ func TestDirectConfigAdaptersWriteExpectedRootShape(t *testing.T) {
 			if err := json.Unmarshal(data, &root); err != nil {
 				t.Fatal(err)
 			}
-			entry := root[test.rootKey].(map[string]any)[serverName].(map[string]any)
-			if entry["command"] != manager.serverCommand[0] {
-				t.Fatalf("entry = %#v", entry)
+			entries, ok := objectAtPath(root, test.rootPath)
+			if !ok {
+				t.Fatalf("missing config path %v in %#v", test.rootPath, root)
 			}
-			if test.vscode && entry["type"] != "stdio" {
-				t.Fatalf("VS Code entry = %#v", entry)
+			entry := entries[serverName].(map[string]any)
+			if test.stdio {
+				if entry["command"] != manager.serverCommand[0] {
+					t.Fatalf("stdio entry = %#v", entry)
+				}
+				if _, exists := entry["args"]; exists {
+					t.Fatalf("default stdio entry should not include args: %#v", entry)
+				}
+			} else if entry["url"] != testServerURL {
+				t.Fatalf("HTTP entry = %#v", entry)
+			}
+			if test.typeHTTP && entry["type"] != "http" {
+				t.Fatalf("typed HTTP entry = %#v", entry)
 			}
 		})
 	}
@@ -162,11 +262,11 @@ func TestOfficialCLIArgumentsAreFixed(t *testing.T) {
 		}
 	}
 	want := [][]string{
-		{"mcp", "add", serverName, "--", manager.serverCommand[0], "--mcp"},
+		{"mcp", "add", serverName, "--url", testServerURL},
 		{"mcp", "remove", "--scope", "user", serverName},
-		{"mcp", "add", "--scope", "user", serverName, "--", manager.serverCommand[0], "--mcp"},
+		{"mcp", "add", "--transport", "http", "--scope", "user", serverName, testServerURL},
 		{"mcp", "remove", serverName},
-		{"mcp", "add", serverName, "--", manager.serverCommand[0], "--mcp"},
+		{"mcp", "add", serverName, "--url", testServerURL},
 	}
 	if len(calls) != len(want) {
 		t.Fatalf("calls = %#v", calls)
@@ -175,6 +275,37 @@ func TestOfficialCLIArgumentsAreFixed(t *testing.T) {
 		if !reflect.DeepEqual(calls[index].args, want[index]) {
 			t.Fatalf("call %d args = %#v, want %#v", index, calls[index].args, want[index])
 		}
+	}
+}
+
+func TestConfigureSkipsMatchingOpenCodeConfig(t *testing.T) {
+	calls := 0
+	manager := testManager(t, func(name string) (string, error) {
+		if name == "opencode" {
+			return `C:\bin\opencode.exe`, nil
+		}
+		return "", errors.New("not found")
+	}, func(context.Context, string, ...string) (string, error) {
+		calls++
+		return "", nil
+	})
+	path := manager.configPaths("opencode")[0]
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	content := []byte(`{"mcp":{"ssh-mcp":{"type":"remote","url":"` + testServerURL + `"}}}`)
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result := manager.Configure(context.Background(), []string{"opencode"})[0]
+	if !result.OK || !strings.Contains(result.Message, "已跳过") || result.BackupPath != "" {
+		t.Fatalf("result = %#v", result)
+	}
+	if calls != 0 {
+		t.Fatalf("matching config executed CLI %d time(s)", calls)
+	}
+	if _, err := os.Stat(path + ".ssh-mcp.bak"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("skip unexpectedly created backup: %v", err)
 	}
 }
 
@@ -269,7 +400,7 @@ func TestNullJSONConfigIsRejectedWithoutModification(t *testing.T) {
 	if err := os.WriteFile(path, []byte("null\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := mergeJSONConfig(path, "mcpServers", map[string]any{"command": "ssh-mcp.exe"}); err == nil {
+	if _, err := mergeJSONConfig(path, []string{"mcpServers"}, map[string]any{"command": "ssh-mcp.exe"}); err == nil {
 		t.Fatal("null config was accepted")
 	}
 	data, err := os.ReadFile(path)
@@ -284,7 +415,7 @@ func TestJSONCConfigIsRejectedWithoutLosingComments(t *testing.T) {
 	if err := os.WriteFile(path, original, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := mergeJSONConfig(path, "mcpServers", map[string]any{"command": "ssh-mcp.exe"}); err == nil {
+	if _, err := mergeJSONConfig(path, []string{"mcpServers"}, map[string]any{"command": "ssh-mcp.exe"}); err == nil {
 		t.Fatal("JSONC config was rewritten")
 	}
 	data, err := os.ReadFile(path)

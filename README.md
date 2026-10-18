@@ -39,7 +39,7 @@ OpenCode 一键接入通过 `--global` 写入用户全局配置，对所有项�
 Linux 安装示例（将文件名替换为下载的版本）：
 
 ```bash
-sudo dpkg -i ./SSH-MCP-Setup-0.1.4-linux-amd64.deb
+sudo dpkg -i ./SSH-MCP-Setup-0.1.5-linux-amd64.deb
 ```
 
 **平台差异：** Windows 提供原生托盘、单实例管理和可选开机自启。macOS/Linux 不提供原生托盘或自动启动服务，管理服务在终端前台运行，按 Ctrl+C 退出。三个平台均支持 stdio、WebUI 和 Streamable HTTP MCP。
@@ -182,11 +182,11 @@ go mod verify
 - **版本校验**：标签必须与 `internal/mcpserver/server.go` 的版本一致，安装包版本从构建后的程序读取。
 - **权限边界**：普通构建只使用仓库读取权限，只有发布任务拥有 `contents: write`。
 
-例如，提交并推送版本 `0.1.4` 的代码后：
+例如，提交并推送版本 `0.1.5` 的代码后：
 
 ```bash
-git tag -a v0.1.4 -m "Release v0.1.4"
-git push origin v0.1.4
+git tag -a v0.1.5 -m "Release v0.1.5"
+git push origin v0.1.5
 ```
 
 ## 文档与反馈

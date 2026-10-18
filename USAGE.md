@@ -26,7 +26,7 @@ macOS：双击 `SSH-MCP-Setup-<版本>-macos-universal.pkg` 安装，程序位�
 Debian/Ubuntu：
 
 ```bash
-sudo dpkg -i ./SSH-MCP-Setup-0.1.4-linux-amd64.deb
+sudo dpkg -i ./SSH-MCP-Setup-0.1.5-linux-amd64.deb
 ```
 
 程序位于 `/usr/bin/ssh-mcp`。两平台安装后都在终端运行：
@@ -47,7 +47,7 @@ ssh-mcp --open
 推荐使用安装包：
 
 ```text
-dist\installer\SSH-MCP-Setup-0.1.4.exe
+dist\installer\SSH-MCP-Setup-0.1.5.exe
 ```
 
 运行安装包后，可以选择创建桌面快捷方式和登录 Windows 时自动启动托盘。开始菜单、桌面快捷方式及安装完成页都会使用 `ssh-mcp.exe --open`，因此启动应用时会同时打开 WebUI。
@@ -70,7 +70,7 @@ dist\ssh-mcp.exe
 
 ```text
 dist\ssh-mcp.exe
-dist\installer\SSH-MCP-Setup-0.1.4.exe
+dist\installer\SSH-MCP-Setup-0.1.5.exe
 ```
 
 仅构建免安装程序：
@@ -88,7 +88,7 @@ dist\installer\SSH-MCP-Setup-0.1.4.exe
 预期输出：
 
 ```text
-ssh-mcp 0.1.4
+ssh-mcp 0.1.5
 ```
 
 ## 3. 启动方式

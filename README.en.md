@@ -39,7 +39,7 @@ Download the appropriate installer from [GitHub Releases](https://github.com/ack
 Linux installation example; replace the filename with the version you downloaded:
 
 ```bash
-sudo dpkg -i ./SSH-MCP-Setup-0.1.4-linux-amd64.deb
+sudo dpkg -i ./SSH-MCP-Setup-0.1.5-linux-amd64.deb
 ```
 
 **Platform differences:** Windows provides a native system tray, single-instance management, and optional startup at login. macOS/Linux do not provide a native tray or install an automatic startup service; the management service runs in the foreground until you press Ctrl+C. All three platforms support stdio, the WebUI, and Streamable HTTP MCP.
@@ -182,11 +182,11 @@ The [build workflow](.github/workflows/build.yml) tests and packages the applica
 - **Version validation** requires the tag to match `internal/mcpserver/server.go`. Installer versions are read from the built application.
 - **Permissions** are read-only for regular builds. Only the release job receives `contents: write`.
 
-For example, after committing and pushing the source for version `0.1.4`:
+For example, after committing and pushing the source for version `0.1.5`:
 
 ```bash
-git tag -a v0.1.4 -m "Release v0.1.4"
-git push origin v0.1.4
+git tag -a v0.1.5 -m "Release v0.1.5"
+git push origin v0.1.5
 ```
 
 ## Documentation and support

@@ -47,7 +47,7 @@ ssh-mcp --open
 推荐使用安装包：
 
 ```text
-C:\Users\xiaobai\Desktop\ssh-mcp2\dist\installer\SSH-MCP-Setup-0.1.3.exe
+dist\installer\SSH-MCP-Setup-0.1.3.exe
 ```
 
 运行安装包后，可以选择创建桌面快捷方式和登录 Windows 时自动启动托盘。开始菜单、桌面快捷方式及安装完成页都会使用 `ssh-mcp.exe --open`，因此启动应用时会同时打开 WebUI。
@@ -57,7 +57,7 @@ C:\Users\xiaobai\Desktop\ssh-mcp2\dist\installer\SSH-MCP-Setup-0.1.3.exe
 免安装单文件程序位于：
 
 ```text
-C:\Users\xiaobai\Desktop\ssh-mcp2\dist\ssh-mcp.exe
+dist\ssh-mcp.exe
 ```
 
 需要重新构建时，在项目目录执行：
@@ -542,7 +542,7 @@ Get-NetTCPConnection -LocalPort 8877 -ErrorAction SilentlyContinue
 在终端验证版本：
 
 ```powershell
-& "C:\Users\xiaobai\Desktop\ssh-mcp2\dist\ssh-mcp.exe" --version
+.\dist\ssh-mcp.exe --version
 ```
 
 修改 MCP 配置后应完全重启客户端。

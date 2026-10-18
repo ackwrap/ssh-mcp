@@ -58,7 +58,7 @@ else
 fi
 install -d -m 0755 "$bin_dir" "$doc_dir"
 install -m 0755 "$dist/ssh-mcp" "$bin_dir/ssh-mcp"
-install -m 0644 README.md USAGE.md "$doc_dir/"
+install -m 0644 README.md README.en.md USAGE.md "$doc_dir/"
 install -m 0644 LICENSE "$doc_dir/copyright"
 
 if [[ "$system" == Darwin ]]; then

@@ -4,7 +4,7 @@
 
 ## 项目目标
 
-本项目是 `C:\Users\xiaobai\Desktop\ssh_mcp` Python 项目的原生 Go 迁移版。
+本项目是 SSH-MCP 的原生 Go 实现，保持与旧版的数据和接口兼容。
 
 核心目标：
 

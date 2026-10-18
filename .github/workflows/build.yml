@@ -95,7 +95,7 @@ jobs:
           APP_VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          lipo -verify_arch x86_64 arm64 dist/ssh-mcp
+          lipo dist/ssh-mcp -verify_arch x86_64 arm64
           codesign --verify --strict dist/ssh-mcp
           sudo installer -pkg dist/installer/*.pkg -target /
           test "$(/usr/local/bin/ssh-mcp --version)" = "ssh-mcp $APP_VERSION"

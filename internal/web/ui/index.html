@@ -89,7 +89,7 @@
         <h2>AI 工具接入</h2>
         <button class="btn" id="btn-refresh-integrations">刷新检测</button>
       </div>
-      <p class="hint">自动检测本机 AI 工具，并使用独立的无参数 stdio 子进程接入。取消接入只删除 ssh-mcp 配置，不会卸载 AI 工具或 SSH-MCP 应用。</p>
+      <p class="hint">自动检测本机 AI 工具，默认不勾选任何工具；请主动选择后接入。每个工具使用独立的无参数 stdio 子进程。取消接入只删除 ssh-mcp 配置，不会卸载 AI 工具或 SSH-MCP 应用。</p>
       <div class="integration-executable">MCP stdio 命令：<code id="integration-exe">检测中…</code></div>
       <div class="integration-toolbar">
         <button class="btn" id="btn-select-installed" disabled>选择待接入</button>

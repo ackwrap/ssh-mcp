@@ -55,7 +55,7 @@ func (m *Manager) Configure(ctx context.Context, ids []string) []Result {
 func (m *Manager) configureOne(ctx context.Context, item descriptor, info ToolInfo) (string, error) {
 	switch item.configKind {
 	case "opencode":
-		add := append([]string{"mcp", "add", serverName, "--"}, m.serverCommand...)
+		add := append([]string{"mcp", "add", serverName, "--global", "--"}, m.serverCommand...)
 		return m.configureCLI(ctx, item, info, nil, add)
 	case "claude":
 		remove := []string{"mcp", "remove", "--scope", "user", serverName}

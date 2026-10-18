@@ -294,7 +294,7 @@ func TestOfficialCLIArgumentsAreFixed(t *testing.T) {
 		}
 	}
 	want := [][]string{
-		{"mcp", "add", serverName, "--", manager.serverCommand[0]},
+		{"mcp", "add", serverName, "--global", "--", manager.serverCommand[0]},
 		{"mcp", "remove", "--scope", "user", serverName},
 		{"mcp", "add", "--scope", "user", serverName, "--", manager.serverCommand[0]},
 		{"mcp", "remove", serverName},

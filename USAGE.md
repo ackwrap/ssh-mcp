@@ -272,7 +272,7 @@ WebUI 不再提供需要手动复制的“对接文档”页面。打开“AI �
 
 | 工具 | 检测方式 | 配置方式 | 传输方式 |
 | --- | --- | --- | --- |
-| OpenCode | `opencode` 命令 | 官方 `opencode mcp add ... --` | stdio |
+| OpenCode | `opencode` 命令 | 官方 `opencode mcp add ... --global --` | stdio |
 | Claude Code | `claude` 命令 | 官方 `claude mcp add --scope user ... --` | stdio |
 | OpenAI Codex | `codex` 命令 | 官方 `codex mcp add ... --` | stdio |
 | Kimi Code CLI | `kimi` 命令 | 用户级 `~/.kimi/mcp.json` | stdio |
@@ -286,7 +286,7 @@ WebUI 不再提供需要手动复制的“对接文档”页面。打开“AI �
 1. 启动 SSH-MCP 并登录 WebUI。
 2. 打开“AI 工具接入”。
 3. 点击“刷新检测”确认安装状态和配置路径。
-4. 勾选需要接入的工具；已安装且未接入的工具默认选中。
+4. 主动勾选需要接入的工具；初次打开、刷新检测和操作后重新加载列表时默认全部不勾选，也可点击“选择待接入”或“选择可取消”批量选择。
 5. 点击“一键接入”并确认。
 6. 查看每个工具的成功或失败结果。
 7. 按页面提示完全重启对应 AI 工具。
@@ -300,6 +300,8 @@ WebUI 不再提供需要手动复制的“对接文档”页面。打开“AI �
 Windows 上如果 `PATH` 命中 Scoop 生成的 `.exe` shim，程序会读取同目录标准 `.shim` 元数据，并通过 Windows 文件句柄确认最终目标仍位于同一个 Scoop 同名应用的 `apps` 目录后直接启动，避免无控制台的托盘进程触发 Scoop shim 创建进程失败。相对路径、网络路径、跨应用目标、缺失目标或异常大的元数据不会被采用。
 
 OpenCode、Claude Code、Codex 使用各自官方 CLI 写入全局或用户级 stdio 配置。Kimi Code、ZCode、Cursor、VS Code 和 Claude Desktop 使用其公开配置格式进行原子合并。
+
+OpenCode 使用 `--global`，默认写入 `~/.config/opencode/opencode.json(c)`（设置 `XDG_CONFIG_HOME` 时使用对应目录），不修改启动目录中的项目配置。检测和取消接入支持 V2 的 `mcp.servers.ssh-mcp`，也兼容旧版 `mcp.ssh-mcp`。如果旧版本接入后只在某个项目可见，升级后重新点击“一键接入”即可补上全局配置；已有项目级条目不会自动删除，仍可能覆盖全局同名条目，需按需检查。
 
 工具检测使用当前 Windows 用户的 `PATH`、`CODEX_HOME`、`KIMI_SHARE_DIR` 等环境设置。只应接入你确认可信的本机工具安装；如果同名命令来自未知目录，应先修正 `PATH`。一键接入会在写入前再次比较文件内容，发现外部更新时拒绝覆盖并要求刷新重试；不要在接入过程中同时编辑同一个配置文件。
 

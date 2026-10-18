@@ -50,7 +50,7 @@ func (m *Manager) Remove(ctx context.Context, ids []string) []Result {
 func (m *Manager) removeOne(ctx context.Context, item descriptor, info ToolInfo) (string, error) {
 	switch item.configKind {
 	case "opencode":
-		backup, _, err := removeJSONConfigs(m.configPaths(item.id), []string{"mcp"})
+		backup, _, err := removeJSONConfigs(m.configPaths(item.id), []string{"mcp", "servers"}, []string{"mcp"})
 		return backup, err
 	case "claude":
 		if !info.Installed {

@@ -22,7 +22,9 @@ Manage connections and credentials through a local WebUI, then use your MCP clie
 - **Client integrations**: Built-in detection and configuration adapters for OpenCode, Claude Code, Codex, Kimi Code, ZCode, Cursor, VS Code, and Claude Desktop.
 - **Transfers and transports**: stdio and Streamable HTTP MCP, SSH connection reuse, and a 1 MiB local read buffer per upload with bounded pipelined writes, retaining compatible 32 KiB SFTP packets.
 
-Automatic integration availability depends on the client installation and platform. Review the detected tools and configuration paths in the WebUI before making changes. Configuration files are backed up before integration setup or removal modifies them.
+Automatic integration availability depends on the client installation and platform. No tools are selected by default; explicitly select tools and review their configuration paths in the WebUI before making changes. Configuration files are backed up before integration setup or removal modifies them.
+
+OpenCode integration uses `--global` to write user-wide configuration for all projects without changing the current project's `opencode.json(c)`.
 
 ## Platforms and installation
 

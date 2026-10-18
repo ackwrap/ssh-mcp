@@ -85,7 +85,7 @@ func TestIntegrationAPIRequiresAuthAndUsesAllowlistedCommand(t *testing.T) {
 	if !results[0].(map[string]any)["ok"].(bool) {
 		t.Fatalf("result = %#v", results[0])
 	}
-	want := []string{`C:\bin\opencode.exe`, "mcp", "add", "ssh-mcp", "--", `C:\Program Files\SSH-MCP\ssh-mcp.exe`}
+	want := []string{`C:\bin\opencode.exe`, "mcp", "add", "ssh-mcp", "--global", "--", `C:\Program Files\SSH-MCP\ssh-mcp.exe`}
 	if len(calls) != 1 || !reflect.DeepEqual(calls[0], want) {
 		t.Fatalf("calls = %#v", calls)
 	}

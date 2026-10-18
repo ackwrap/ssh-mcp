@@ -79,9 +79,14 @@ type jsonRemoval struct {
 	data     []byte
 }
 
-func removeJSONConfigs(paths []string, rootPath []string) (string, bool, error) {
-	if len(rootPath) == 0 {
+func removeJSONConfigs(paths []string, rootPaths ...[]string) (string, bool, error) {
+	if len(rootPaths) == 0 {
 		return "", false, errors.New("配置字段路径不能为空")
+	}
+	for _, rootPath := range rootPaths {
+		if len(rootPath) == 0 {
+			return "", false, errors.New("配置字段路径不能为空")
+		}
 	}
 	removals := make([]jsonRemoval, 0, len(paths))
 	for _, path := range paths {
@@ -96,18 +101,24 @@ func removeJSONConfigs(paths []string, rootPath []string) (string, bool, error) 
 		if err != nil {
 			return "", false, fmt.Errorf("配置文件不是有效的 JSON/JSONC，未修改 %s: %w", path, err)
 		}
-		entries, ok := objectAtPath(root, rootPath)
-		if !ok {
-			continue
+		changed := false
+		for _, rootPath := range rootPaths {
+			entries, ok := objectAtPath(root, rootPath)
+			if !ok {
+				continue
+			}
+			if _, exists := entries[serverName]; exists {
+				delete(entries, serverName)
+				changed = true
+			}
 		}
-		if _, exists := entries[serverName]; !exists {
+		if !changed {
 			continue
 		}
 		clean := removeTrailingCommas(stripJSONComments(snapshot.data))
 		if !bytes.Equal(clean, snapshot.data) {
 			return "", false, fmt.Errorf("配置文件包含注释或尾逗号，为避免破坏原格式未修改 %s", path)
 		}
-		delete(entries, serverName)
 		data, err := json.MarshalIndent(root, "", "  ")
 		if err != nil {
 			return "", false, err

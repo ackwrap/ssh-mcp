@@ -22,7 +22,9 @@
 - **客户端接入**：内置 OpenCode、Claude Code、Codex、Kimi Code、ZCode、Cursor、VS Code 和 Claude Desktop 的检测与接入适配器。
 - **传输与运行方式**：支持 stdio 和 Streamable HTTP MCP；SSH 连接复用，上传使用每文件 1 MiB 本地读缓存和有界流水线写入，保留兼容的 32 KiB SFTP 分包。
 
-自动接入的可用性取决于客户端的安装方式和平台。操作前请检查 WebUI 展示的工具与配置路径；接入或取消接入前会备份需要修改的配置文件。
+自动接入的可用性取决于客户端的安装方式和平台。工具列表默认全部不勾选，请主动选择并检查 WebUI 展示的工具与配置路径；接入或取消接入前会备份需要修改的配置文件。
+
+OpenCode 一键接入通过 `--global` 写入用户全局配置，对所有项目生效，不修改当前项目的 `opencode.json(c)`。
 
 ## 平台与安装
 

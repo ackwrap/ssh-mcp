@@ -50,7 +50,7 @@ function renderIntegrations() {
     return `<label class="integration-card ${selectable ? "" : "unavailable"}">
       <div class="integration-card-head">
         <input class="integration-check" type="checkbox" value="${esc(tool.id)}"
-          ${installed && !configured ? "checked" : ""} ${selectable ? "" : "disabled"}>
+          ${selectable ? "" : "disabled"}>
         <span class="integration-name">${esc(tool.name || tool.id)}</span>
       </div>
       <div class="tags">

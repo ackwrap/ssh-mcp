@@ -23,7 +23,7 @@ type descriptor struct {
 
 func toolDescriptors() []descriptor {
 	return []descriptor{
-		{id: "opencode", name: "OpenCode", commands: []string{"opencode"}, method: "官方 CLI", note: "优先直接启动 Scoop 或 npm 安装的真实 OpenCode，不经过 shim。", restartHint: "请完全退出并重新启动 OpenCode", configKind: "opencode", transport: "stdio", commandPaths: opencodeCommandPaths},
+		{id: "opencode", name: "OpenCode", commands: []string{"opencode"}, method: "官方 CLI", note: "使用 --global 写入全局配置，对所有项目生效；优先直接启动 Scoop 或 npm 安装的真实 OpenCode，不经过 shim。", restartHint: "请完全退出并重新启动 OpenCode", configKind: "opencode", transport: "stdio", commandPaths: opencodeCommandPaths},
 		{id: "claude-code", name: "Claude Code", commands: []string{"claude"}, method: "官方 CLI", note: "使用 user scope 配置，不修改项目级 .mcp.json。", restartHint: "请重新启动 Claude Code", configKind: "claude", transport: "stdio"},
 		{id: "codex", name: "OpenAI Codex", commands: []string{"codex"}, method: "官方 CLI", note: "直接检测 npm 用户安装路径，并通过 codex mcp 管理 ~/.codex/config.toml。", restartHint: "请重新启动 Codex", configKind: "codex", transport: "stdio", commandPaths: codexCommandPaths},
 		{id: "kimi-code", name: "Kimi Code CLI", commands: []string{"kimi"}, method: "配置文件", note: "写入用户级 ~/.kimi/mcp.json，不影响项目级配置。", restartHint: "请新建 Kimi Code 会话", configKind: "standard", rootPath: []string{"mcpServers"}, transport: "stdio"},
@@ -178,6 +178,13 @@ func (m *Manager) configurationState(item descriptor, paths []string) (bool, boo
 			continue
 		}
 		entries, _ := objectAtPath(root, rootPath)
+		if item.configKind == "opencode" {
+			if servers, ok := entries["servers"].(map[string]any); ok {
+				if _, exists := servers[serverName]; exists {
+					entries = servers
+				}
+			}
+		}
 		value, exists := entries[serverName]
 		if !exists {
 			continue

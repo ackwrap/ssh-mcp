@@ -21,25 +21,6 @@ func TestNewManagerRejectsNonLoopbackServerURL(t *testing.T) {
 	}
 }
 
-func testManager(t *testing.T, lookPath func(string) (string, error), run func(context.Context, string, ...string) (string, error)) *Manager {
-	t.Helper()
-	home := t.TempDir()
-	manager, err := NewManager(Options{
-		ServerCommand: []string{`C:\Program Files\SSH-MCP\ssh-mcp.exe`},
-		ServerURL:     testServerURL,
-		HomeDir:       home,
-		AppData:       filepath.Join(home, "AppData", "Roaming"),
-		LocalAppData:  filepath.Join(home, "AppData", "Local"),
-		Getenv:        func(string) string { return "" },
-		LookPath:      lookPath,
-		Run:           run,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return manager
-}
-
 func TestDetectInstalledAndConfiguredJSONC(t *testing.T) {
 	manager := testManager(t, func(name string) (string, error) {
 		if name == "opencode" {

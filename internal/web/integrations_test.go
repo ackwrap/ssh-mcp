@@ -107,6 +107,10 @@ func TestRemoveIntegrationAPIRequiresAuthAndPreservesOtherConfig(t *testing.T) {
 		LocalAppData:  filepath.Join(dataDir, "localappdata"),
 		Getenv:        func(string) string { return "" },
 		LookPath:      func(string) (string, error) { return "", errors.New("not found") },
+		Run: func(_ context.Context, command string, _ ...string) (string, error) {
+			t.Fatalf("unexpected external CLI execution in test: %s", command)
+			return "", errors.New("external CLI execution blocked")
+		},
 	})
 	if err != nil {
 		t.Fatal(err)

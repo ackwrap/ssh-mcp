@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ackwrap/ssh-mcp/internal/config"
+	"github.com/ackwrap/ssh-mcp/internal/secure"
+	"github.com/ackwrap/ssh-mcp/internal/sshclient"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/ssh-mcp/ssh-mcp-go/internal/config"
-	"github.com/ssh-mcp/ssh-mcp-go/internal/secure"
-	"github.com/ssh-mcp/ssh-mcp-go/internal/sshclient"
 )
 
 const (
@@ -83,7 +83,7 @@ func NewServer(runtime *Runtime) *mcp.Server {
 	}
 	server := mcp.NewServer(&mcp.Implementation{Name: Name, Version: Version, Title: "SSH-MCP"}, nil)
 
-	mcp.AddTool(server, &mcp.Tool{Name: "ssh_list_servers", Title: "列出服务器与跳板机", Description: "列出所有已配置的服务器和跳板机（不含凭据）。"},
+	mcp.AddTool(server, &mcp.Tool{Name: "ssh_list_servers", Title: "列出服务器与跳板机", Description: "列出已启用的服务器（含 group 分组）和跳板机，不含凭据。主机及代理地址默认以 ****** 隐藏，只有用户在 WebUI 设置中关闭隐藏 IP 后才显示真实地址。"},
 		func(ctx context.Context, req *mcp.CallToolRequest, input emptyInput) (*mcp.CallToolResult, map[string]any, error) {
 			store, err := OpenStore()
 			if err != nil {
@@ -91,19 +91,25 @@ func NewServer(runtime *Runtime) *mcp.Server {
 			}
 			servers := make([]map[string]any, 0, len(store.Config.Servers))
 			for _, endpoint := range store.Config.Servers {
-				servers = append(servers, config.PublicEndpoint(structMap(endpoint)))
+				if endpoint.Disabled {
+					continue
+				}
+				servers = append(servers, config.PublicEndpoint(structMap(endpoint), store.Config.Settings.AllowMCPAddresses))
 			}
 			jumps := make([]map[string]any, 0, len(store.Config.JumpHosts))
 			for _, endpoint := range store.Config.JumpHosts {
-				jumps = append(jumps, config.PublicEndpoint(structMap(endpoint)))
+				jumps = append(jumps, config.PublicEndpoint(structMap(endpoint), store.Config.Settings.AllowMCPAddresses))
 			}
 			return nil, map[string]any{"servers": servers, "jumphosts": jumps}, nil
 		})
 
-	mcp.AddTool(server, &mcp.Tool{Name: "ssh_add_server", Title: "新增服务器", Description: "新增一台服务器。config 包含 name、host、port、username、auth，可选 jump_via 和 proxy。"},
+	mcp.AddTool(server, &mcp.Tool{Name: "ssh_add_server", Title: "新增服务器", Description: "新增一台服务器。config 包含 name、host、port、username、auth，可选 group、jump_via 和 proxy。启用/停用状态只能在 WebUI 中修改。"},
 		func(ctx context.Context, req *mcp.CallToolRequest, input configInput) (*mcp.CallToolResult, map[string]any, error) {
 			store, err := OpenStore()
 			if err != nil {
+				return nil, nil, err
+			}
+			if err := checkMCPServerChanges(input.Config); err != nil {
 				return nil, nil, err
 			}
 			endpoint, err := store.AddServer(input.Config)
@@ -114,10 +120,16 @@ func NewServer(runtime *Runtime) *mcp.Server {
 			return nil, map[string]any{"ok": true, "name": endpoint.Name}, nil
 		})
 
-	mcp.AddTool(server, &mcp.Tool{Name: "ssh_update_server", Title: "更新服务器", Description: "按名称部分更新服务器配置，changes 中的字段覆盖原值。"},
+	mcp.AddTool(server, &mcp.Tool{Name: "ssh_update_server", Title: "更新服务器", Description: "按名称部分更新已启用的服务器，changes 中的字段（含 group 分组）覆盖原值。启用/停用状态只能在 WebUI 中修改。"},
 		func(ctx context.Context, req *mcp.CallToolRequest, input updateInput) (*mcp.CallToolResult, map[string]any, error) {
 			store, err := OpenStore()
 			if err != nil {
+				return nil, nil, err
+			}
+			if _, err := availableServer(store, input.Name); err != nil {
+				return nil, nil, err
+			}
+			if err := checkMCPServerChanges(input.Changes); err != nil {
 				return nil, nil, err
 			}
 			endpoint, err := store.UpdateServer(input.Name, input.Changes)
@@ -132,6 +144,9 @@ func NewServer(runtime *Runtime) *mcp.Server {
 		func(ctx context.Context, req *mcp.CallToolRequest, input nameInput) (*mcp.CallToolResult, map[string]any, error) {
 			store, err := OpenStore()
 			if err != nil {
+				return nil, nil, err
+			}
+			if _, err := availableServer(store, input.Name); err != nil {
 				return nil, nil, err
 			}
 			if err := store.DeleteServer(input.Name); err != nil {
@@ -188,7 +203,7 @@ func NewServer(runtime *Runtime) *mcp.Server {
 			if err != nil {
 				return nil, nil, err
 			}
-			endpoint, err := store.GetServer(input.Server)
+			endpoint, err := availableServer(store, input.Server)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -222,7 +237,7 @@ func NewServer(runtime *Runtime) *mcp.Server {
 			}
 			targets := make([]*config.Server, 0, len(input.Servers))
 			for _, name := range input.Servers {
-				endpoint, findErr := store.GetServer(strings.TrimSpace(name))
+				endpoint, findErr := availableServer(store, strings.TrimSpace(name))
 				if findErr != nil {
 					return nil, nil, findErr
 				}
@@ -241,7 +256,7 @@ func NewServer(runtime *Runtime) *mcp.Server {
 			if err != nil {
 				return nil, nil, err
 			}
-			endpoint, err := store.GetServer(input.Server)
+			endpoint, err := availableServer(store, input.Server)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -397,12 +412,27 @@ func boundedTimeout(seconds int) time.Duration {
 	}
 	return time.Duration(seconds) * time.Second
 }
+func availableServer(store *config.OpenStore, name string) (*config.Server, error) {
+	endpoint, err := store.GetServer(name)
+	if err != nil || endpoint.Disabled {
+		return nil, errors.New("服务器不存在或不可用")
+	}
+	return endpoint, nil
+}
+
+func checkMCPServerChanges(changes map[string]any) error {
+	if _, exists := changes["disabled"]; exists {
+		return errors.New("启用/停用状态只能在 WebUI 中修改")
+	}
+	return nil
+}
+
 func toolTarget(runtime *Runtime, name string) (*config.Server, *sshclient.Manager, error) {
 	store, err := OpenStore()
 	if err != nil {
 		return nil, nil, err
 	}
-	endpoint, err := store.GetServer(name)
+	endpoint, err := availableServer(store, name)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -18,8 +18,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ackwrap/ssh-mcp/internal/config"
 	"github.com/pkg/sftp"
-	"github.com/ssh-mcp/ssh-mcp-go/internal/config"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 )
@@ -523,7 +523,16 @@ func (m *Manager) Upload(server *config.Server, localPath, remotePath string) (m
 	if err != nil {
 		return nil, &Error{Message: "上传失败: " + err.Error()}
 	}
-	_, copyErr := io.Copy(target, source)
+	// Explicitly pipeline writes using the client's bounded concurrency (64 by
+	// default). io.Copy uses sequential writes with the default SFTP options.
+	_, copyErr := target.ReadFromWithConcurrency(source, 0)
+	if copyErr != nil {
+		// Later packets may have succeeded beyond the first failed write. Keep
+		// only the acknowledged prefix instead of leaving holes in the file.
+		if offset, err := target.Seek(0, io.SeekCurrent); err == nil {
+			_ = target.Truncate(offset)
+		}
+	}
 	closeErr := target.Close()
 	if copyErr != nil {
 		return nil, &Error{Message: "上传失败: " + copyErr.Error()}

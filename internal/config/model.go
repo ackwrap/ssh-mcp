@@ -41,17 +41,24 @@ type Endpoint struct {
 
 type Server struct {
 	Endpoint
-	Proxy *ProxySpec `json:"proxy"`
+	Proxy    *ProxySpec `json:"proxy"`
+	Group    string     `json:"group"`
+	Disabled bool       `json:"disabled"`
 }
 
 type JumpHost struct {
 	Endpoint
 }
 
+type Settings struct {
+	AllowMCPAddresses bool `json:"allow_mcp_addresses"`
+}
+
 type AppConfig struct {
 	Version   int        `json:"version"`
 	Servers   []Server   `json:"servers"`
 	JumpHosts []JumpHost `json:"jumphosts"`
+	Settings  Settings   `json:"settings"`
 }
 
 func NewAppConfig() AppConfig {
@@ -195,6 +202,7 @@ func (e *Endpoint) normalizeAndValidate() error {
 }
 
 func (s *Server) NormalizeAndValidate() error {
+	s.Group = strings.TrimSpace(s.Group)
 	if err := s.Endpoint.normalizeAndValidate(); err != nil {
 		return err
 	}

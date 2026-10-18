@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ssh-mcp/ssh-mcp-go/internal/integration"
-	"github.com/ssh-mcp/ssh-mcp-go/internal/mcpserver"
+	"github.com/ackwrap/ssh-mcp/internal/integration"
+	"github.com/ackwrap/ssh-mcp/internal/mcpserver"
 )
 
 func TestNewIntegrationManagerUsesConfiguredPort(t *testing.T) {

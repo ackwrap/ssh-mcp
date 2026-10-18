@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/ackwrap/ssh-mcp/internal/secure"
 	"github.com/gofrs/flock"
-	"github.com/ssh-mcp/ssh-mcp-go/internal/secure"
 )
 
 type ConflictError struct{ Message string }
@@ -279,6 +279,12 @@ func (o *OpenStore) commit(cfg AppConfig) error {
 	return nil
 }
 
+func (o *OpenStore) SetSettings(settings Settings) error {
+	cfg := cloneConfig(o.Config)
+	cfg.Settings = settings
+	return o.commit(cfg)
+}
+
 func (o *OpenStore) GetServer(name string) (*Server, error) {
 	for i := range o.Config.Servers {
 		if o.Config.Servers[i].Name == name {
@@ -483,6 +489,8 @@ func (o *OpenStore) ImportFull(data map[string]any, sourcePassword string) (AppC
 	if err != nil {
 		return AppConfig{}, err
 	}
+	// Address disclosure requires a local opt-in; imports must not change it.
+	cfg.Settings = o.Config.Settings
 	if err := o.commit(cfg); err != nil {
 		return AppConfig{}, err
 	}
@@ -506,8 +514,11 @@ func MaskEndpoint(data map[string]any) map[string]any {
 	return masked
 }
 
-func PublicEndpoint(data map[string]any) map[string]any {
+func PublicEndpoint(data map[string]any, allowAddresses bool) map[string]any {
 	public := cloneMap(data)
+	if !allowAddresses {
+		public["host"] = Mask
+	}
 	if auth, ok := public["auth"].(map[string]any); ok {
 		public["auth"] = map[string]any{"type": auth["type"]}
 	}
@@ -517,6 +528,9 @@ func PublicEndpoint(data map[string]any) map[string]any {
 			if value, exists := proxy[key]; exists && value != nil {
 				clean[key] = value
 			}
+		}
+		if !allowAddresses {
+			clean["host"] = Mask
 		}
 		public["proxy"] = clean
 	}

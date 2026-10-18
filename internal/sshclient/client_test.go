@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ackwrap/ssh-mcp/internal/config"
 	"github.com/pkg/sftp"
-	"github.com/ssh-mcp/ssh-mcp-go/internal/config"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -102,7 +102,7 @@ func TestJumpChainAndProxies(t *testing.T) {
 	}
 }
 
-func startTestSSHServer(t *testing.T) (int, func()) {
+func startTestSSHServer(t testing.TB, handlers ...sftp.Handlers) (int, func()) {
 	t.Helper()
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -131,14 +131,14 @@ func startTestSSHServer(t *testing.T) (int, func()) {
 				return
 			}
 			connections.Add(1)
-			go func() { defer connections.Done(); serveTestSSH(conn, serverConfig) }()
+			go func() { defer connections.Done(); serveTestSSH(conn, serverConfig, handlers...) }()
 		}
 	}()
 	stop := func() { _ = listener.Close(); connections.Wait() }
 	return listener.Addr().(*net.TCPAddr).Port, stop
 }
 
-func serveTestSSH(raw net.Conn, serverConfig *ssh.ServerConfig) {
+func serveTestSSH(raw net.Conn, serverConfig *ssh.ServerConfig, handlers ...sftp.Handlers) {
 	connection, channels, requests, err := ssh.NewServerConn(raw, serverConfig)
 	if err != nil {
 		_ = raw.Close()
@@ -159,7 +159,7 @@ func serveTestSSH(raw net.Conn, serverConfig *ssh.ServerConfig) {
 		if err != nil {
 			continue
 		}
-		go serveTestSession(channel, requests)
+		go serveTestSession(channel, requests, handlers...)
 	}
 }
 
@@ -188,7 +188,7 @@ func serveTestTunnel(request ssh.NewChannel) {
 	go relayConnections(channel, target)
 }
 
-func serveTestSession(channel ssh.Channel, requests <-chan *ssh.Request) {
+func serveTestSession(channel ssh.Channel, requests <-chan *ssh.Request, handlers ...sftp.Handlers) {
 	defer channel.Close()
 	for request := range requests {
 		switch request.Type {
@@ -200,6 +200,12 @@ func serveTestSession(channel ssh.Channel, requests <-chan *ssh.Request) {
 				continue
 			}
 			_ = request.Reply(true, nil)
+			if len(handlers) > 0 {
+				server := sftp.NewRequestServer(channel, handlers[0])
+				_ = server.Serve()
+				_ = server.Close()
+				return
+			}
 			server, err := sftp.NewServer(channel)
 			if err == nil {
 				_ = server.Serve()

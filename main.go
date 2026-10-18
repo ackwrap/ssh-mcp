@@ -8,9 +8,9 @@ import (
 	"io"
 	"os"
 
+	"github.com/ackwrap/ssh-mcp/internal/mcpserver"
+	"github.com/ackwrap/ssh-mcp/internal/tray"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/ssh-mcp/ssh-mcp-go/internal/mcpserver"
-	"github.com/ssh-mcp/ssh-mcp-go/internal/tray"
 )
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
@@ -53,8 +53,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	flags.BoolVar(&version, "version", false, "显示版本并退出")
 	flags.BoolVar(&shortVersion, "v", false, "显示版本并退出")
 	flags.BoolVar(&mcpMode, "mcp", false, "以 stdio 方式运行 MCP 服务器（兼容旧配置，默认行为）")
-	flags.BoolVar(&trayMode, "tray", false, "启动或连接托盘实例")
-	flags.BoolVar(&openWebUI, "open", false, "启动或连接托盘实例后打开 WebUI")
+	flags.BoolVar(&trayMode, "tray", false, "启动 WebUI/HTTP MCP（Windows 托盘，macOS/Linux 前台）")
+	flags.BoolVar(&openWebUI, "open", false, "启动本地管理服务并打开 WebUI")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}

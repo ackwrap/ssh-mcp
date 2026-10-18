@@ -6,16 +6,43 @@
 
 直接使用已构建程序时：
 
-- Windows 10 或 Windows 11。
+- Windows 10/11 x64、macOS（Intel 或 Apple Silicon）或 Debian/Ubuntu Linux x64。
 - 可以访问需要管理的 SSH 服务器。
 - 不需要安装 Python、uv 或 Node.js。
 
 从源码构建时：
 
 - Go 1.25 或更高版本。
-- PowerShell 7 或 Windows PowerShell。
+- Windows 使用 PowerShell 和 Inno Setup 6；macOS 使用 Bash 与 Xcode Command Line Tools；Debian/Ubuntu 使用 Bash 与 `dpkg-deb`。
 
 ## 2. 获取程序
+
+从 [GitHub Releases](https://github.com/ackwrap/ssh-mcp/releases) 下载与系统对应的安装包。Windows 提供 `.exe`，macOS 提供 Intel/Apple Silicon 通用 `.pkg`，Linux 提供 x64 `.deb`。以下 Windows 路径示例仅用于本地构建；自动构建的文件名还包含平台和架构。
+
+### macOS / Linux 安装与启动
+
+macOS：双击 `SSH-MCP-Setup-<版本>-macos-universal.pkg` 安装，程序位于 `/usr/local/bin/ssh-mcp`。安装包暂未进行 Developer ID 签名和公证，系统可能要求手动允许。
+
+Debian/Ubuntu：
+
+```bash
+sudo dpkg -i ./SSH-MCP-Setup-0.1.3-linux-amd64.deb
+```
+
+程序位于 `/usr/bin/ssh-mcp`。两平台安装后都在终端运行：
+
+```bash
+ssh-mcp --version
+ssh-mcp --open
+```
+
+`--open` 启动前台 WebUI/HTTP MCP 并尝试打开浏览器；`--tray` 只启动前台服务，不提供原生托盘。关闭终端或按 Ctrl+C 会停止该管理服务，stdio MCP 子进程不受影响。无图形界面的 Linux 使用 `ssh-mcp --tray`，手动在本机访问 `http://127.0.0.1:8877`。服务仍只监听本机地址，不能暴露到公网。
+
+初次使用先在 WebUI 设置主密码和服务器，再在 MCP 客户端中将 `command` 指向 `/usr/local/bin/ssh-mcp`（macOS）或 `/usr/bin/ssh-mcp`（Linux），无需传入参数。
+
+源码构建在相应系统执行 `bash ./build.sh`，产物在 `dist/` 与 `dist/installer/`。Linux 脚本也支持在 arm64 主机本地打包。自动构建、标签发布、校验和及依赖要求见 [README 的构建说明](README.md#github-actions)。macOS/Linux 默认数据目录为 `~/ssh_mcp/`，包含 `config.json`、`key.bin`、`session.secret`；卸载程序时保留该目录。
+
+### Windows 安装与本地构建
 
 推荐使用安装包：
 
@@ -67,6 +94,8 @@ ssh-mcp 0.1.3
 ## 3. 启动方式
 
 ### 启动托盘程序
+
+本节托盘、快捷方式和开机自启说明适用于 Windows；macOS/Linux 请按上一节使用前台管理服务。
 
 从开始菜单或桌面快捷方式启动时，安装器会自动附加 `--open`。直接运行免安装程序并仅启动托盘服务时，请执行：
 
@@ -147,11 +176,19 @@ stdio MCP 不使用全局单例。每个 MCP 客户端会启动独立子进程�
 | 主机 | IP 地址或域名 |
 | 端口 | SSH 端口，默认 `22` |
 | 用户名 | SSH 登录用户名 |
+| 分组 | 可选，如“生产环境”“测试环境”，留空为“未分组” |
+| 状态 | 启用或停用；默认启用，停用后 AI 无法查看或操作 |
 | 认证方式 | 密码、粘贴私钥或私钥文件路径 |
 | 连接方式 | 直连或选择已有跳板机 |
 | 代理 | 可选 SOCKS5 或 HTTP CONNECT |
 
 保存后可以点击“测试连接”。测试成功会显示连接延迟。
+
+服务器按分组显示，可点击组头折叠/展开，也可在顶部筛选分组。组头显示服务器总数和启用/停用数量，卡片上的“停用”/“启用”按钮可以直接切换状态；也可在编辑弹窗中设置。复制、导入和导出会保留分组与停用状态，旧配置默认启用且未分组。
+
+停用的服务器仍可在 WebUI 中管理和测试连接，但不会返回给 AI。即使 AI 知道名称，MCP 的命令执行、连接测试、文件操作、修改及删除也会拒绝访问；AI 不能通过 MCP 重新启用服务器。状态变更对后续 MCP 请求生效。启用/停用仅控制本程序的 MCP 访问，不会关闭远程 SSH 服务。
+
+新增、编辑和复制弹窗使用全屏遮罩，背景页面不可操作或滚动；移动鼠标、点击遮罩不会关闭弹窗，可使用“取消”或保存成功后关闭。
 
 ### 密码认证
 
@@ -282,13 +319,19 @@ http://127.0.0.1:8877/mcp/
 
 | 工具 | 用途 |
 | --- | --- |
-| `ssh_list_servers` | 列出服务器和跳板机，不返回凭据 |
+| `ssh_list_servers` | 列出已启用服务器（含分组）和跳板机，默认隐藏主机/代理地址，不返回凭据 |
 | `ssh_add_server` | 新增服务器 |
 | `ssh_update_server` | 部分更新服务器 |
 | `ssh_delete_server` | 删除服务器 |
 | `ssh_add_jumphost` | 新增跳板机 |
 | `ssh_update_jumphost` | 部分更新跳板机 |
 | `ssh_delete_jumphost` | 删除跳板机 |
+
+`ssh_list_servers` 的 `servers[].group` 为空字符串时表示未分组；服务器、跳板机及代理的 `host` 默认均为 `******`。通过服务器名称调用其他工具，真实地址仍保留在本地加密配置中。该掩码仅针对列表中的地址字段，WebUI 仍显示真实地址；自定义名称、分组以及远程命令输出不会被改写。
+
+在 WebUI“设置 → MCP 地址隐私”中使用“隐藏 IP”开关：默认开启，只有用户手动关闭后，MCP 列表才能读取真实 IP 或域名。重新开启后，后续列表请求立即恢复隐藏；已返回给客户端的历史内容不会被撤回。开关状态会加密保存并在重启后保留，已有配置缺少该设置时默认隐藏，导入配置也不会改变本机隐私设置。无论开关如何设置，停用服务器仍不可见，密码和私钥仍不会返回。
+
+`ssh_add_server` 和 `ssh_update_server` 支持设置 `group`。`disabled` 为 WebUI/API 管理字段（布尔值），MCP 不允许设置该字段，也不允许操作已停用的服务器。
 
 ### 命令执行
 
@@ -317,7 +360,9 @@ http://127.0.0.1:8877/mcp/
 | `ssh_list_dir` | 列出远程目录 |
 | `ssh_stat` | 获取远程文件属性 |
 
-命令单条输出上限为 4 MB。远程文件读取和写入硬上限为 4 MB，`ssh_read_file` 默认读取上限为 1 MB。
+`ssh_upload` 以流式方式读取本地文件，使用 SFTP 默认 32 KB 数据包和 64 路并发请求流水线，避免每个数据包都串行等待网络往返；不会把整个大文件加载到内存。批量上传时，每次调用都会复用可用的 SSH 连接。上传失败仍会返回错误，并尽力截断到首个失败数据包之前，可能留下不完整文件，需要重新上传。
+
+命令单条输出上限为 4 MB。`ssh_read_file` 和 `ssh_write_file` 的文本内容硬上限为 4 MB，`ssh_read_file` 默认读取上限为 1 MB；该限制不适用于流式 `ssh_upload` / `ssh_download`。
 
 ## 10. 锁定和退出
 
@@ -540,6 +585,8 @@ Get-NetTCPConnection -LocalPort 8877 -ErrorAction SilentlyContinue
 - 同一 Windows 用户下运行的其他进程通常可以访问 loopback 服务和用户数据目录。
 
 ## 21. 卸载
+
+Linux `.deb` 可通过 `sudo dpkg -r ssh-mcp` 卸载。macOS 可移除 `/usr/local/bin/ssh-mcp` 和 `/usr/local/share/doc/ssh-mcp/` 中的程序与文档。两平台的 `~/ssh_mcp/` 为用户配置目录，不应随程序卸载删除。以下 Windows 卸载说明保持不变。
 
 通过安装包安装时，可以在 Windows“设置 -> 应用 -> 已安装的应用”中卸载 SSH-MCP，也可以使用开始菜单中的卸载入口。
 

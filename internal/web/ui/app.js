@@ -12,6 +12,7 @@ const state = {
   integrationResultTitle: "接入结果",
   integrationsLoading: false,
 };
+const collapsedGroups = new Set();
 
 // ---------------- 基础工具 ----------------
 async function api(path, opts = {}) {
@@ -88,6 +89,7 @@ async function checkAuth() {
 }
 
 function showAuth() {
+  closeModal();
   $("#app").classList.add("hidden");
   const ov = $("#auth-overlay");
   ov.classList.remove("hidden");
@@ -140,6 +142,7 @@ function route() {
   if (view === "servers") loadServers();
   if (view === "jumps") loadJumps();
   if (view === "integrations") loadIntegrations();
+  if (view === "settings") loadSettings();
 }
 window.addEventListener("hashchange", route);
 
@@ -156,12 +159,49 @@ async function loadServers() {
     state.jumps = jumps.jumphosts;
   } catch (ex) { toast(ex.message, "err"); return; }
   state.servers = data.servers;
+  const filter = $("#server-group-filter");
+  const selected = filter.value;
+  const groups = [...new Set(data.servers.map((s) => s.group || ""))].sort((a, b) => a.localeCompare(b, "zh-CN"));
+  filter.innerHTML = '<option value="">全部分组</option>' + groups.map((g) =>
+    `<option value="${esc("group:" + g)}">${esc(g || "未分组")}</option>`
+  ).join("");
+  filter.value = [...filter.options].some((o) => o.value === selected) ? selected : "";
+  renderServers();
+}
+
+$("#server-group-filter").addEventListener("change", renderServers);
+
+function renderServers() {
   const box = $("#server-list");
-  if (!data.servers.length) {
+  const servers = state.servers || [];
+  const enabled = servers.filter((s) => !s.disabled).length;
+  $("#server-summary").textContent = `${servers.length} 台服务器 · ${enabled} 台已启用 · ${servers.length - enabled} 台已停用`;
+  if (!servers.length) {
     box.innerHTML = `<p class="hint">还没有服务器。点击右上角「+ 新增服务器」添加，或在 AI 工具里直接让我帮你添加。</p>`;
     return;
   }
-  box.innerHTML = data.servers.map(serverCard).join("");
+  const selected = $("#server-group-filter").value;
+  const grouped = new Map();
+  for (const s of servers) {
+    const group = s.group || "";
+    if (selected && selected !== "group:" + group) continue;
+    if (!grouped.has(group)) grouped.set(group, []);
+    grouped.get(group).push(s);
+  }
+  box.innerHTML = [...grouped].sort(([a], [b]) => a.localeCompare(b, "zh-CN")).map(([group, items]) => {
+    const active = items.filter((s) => !s.disabled).length;
+    return `<details class="server-group" data-group="${esc(group)}" ${collapsedGroups.has(group) ? "" : "open"}>
+      <summary class="server-group-head">
+        <span class="server-group-name">${esc(group || "未分组")}<span class="group-count">${items.length}</span></span>
+        <span class="server-group-stats"><span class="group-enabled">${active} 启用</span>${items.length > active ? `<span>${items.length - active} 停用</span>` : ""}</span>
+      </summary>
+      <div class="card-grid">${items.map(serverCard).join("")}</div>
+    </details>`;
+  }).join("");
+  $$("#server-list .server-group").forEach((el) => el.addEventListener("toggle", () => {
+    if (el.open) collapsedGroups.delete(el.dataset.group);
+    else collapsedGroups.add(el.dataset.group);
+  }));
   $$("#server-list .test-btn").forEach((b) =>
     b.addEventListener("click", () => testServer(b.dataset.name, b))
   );
@@ -174,21 +214,37 @@ async function loadServers() {
   $$("#server-list .del-btn").forEach((b) =>
     b.addEventListener("click", () => delServer(b.dataset.name))
   );
+  $$("#server-list .toggle-btn").forEach((b) =>
+    b.addEventListener("click", () => toggleServer(b.dataset.name, b))
+  );
 }
 
 function serverCard(s) {
-  return `<div class="card">
+  return `<div class="card${s.disabled ? " disabled" : ""}">
     <div class="name">${esc(s.name)}</div>
     <div class="meta">${esc(s.username)}@${esc(s.host)}:${s.port}</div>
-    <div class="tags">${authLabel(s.auth)}${jumpLabel(s.jump_via)}${proxyLabel(s.proxy)}</div>
+    <div class="tags"><span class="tag ${s.disabled ? "orange" : "green"}">${s.disabled ? "已停用 · AI 不可见" : "已启用"}</span>${authLabel(s.auth)}${jumpLabel(s.jump_via)}${proxyLabel(s.proxy)}</div>
     <div class="status" id="st-${esc(s.name)}"></div>
     <div class="actions">
       <button class="btn small test-btn" data-name="${esc(s.name)}">测试连接</button>
       <button class="btn small edit-btn" data-name="${esc(s.name)}">编辑</button>
       <button class="btn small copy-btn" data-name="${esc(s.name)}">复制</button>
+      <button class="btn small toggle-btn" data-name="${esc(s.name)}">${s.disabled ? "启用" : "停用"}</button>
       <button class="btn small danger del-btn" data-name="${esc(s.name)}">删除</button>
     </div>
   </div>`;
+}
+
+async function toggleServer(name, btn) {
+  const server = state.servers.find((s) => s.name === name);
+  if (!server) return;
+  btn.disabled = true;
+  try {
+    await api(`/api/servers/${encodeURIComponent(name)}`, { method: "PUT", body: { disabled: !server.disabled } });
+    toast(server.disabled ? "已启用，AI 可访问" : "已停用，AI 无法查看或操作");
+    await loadServers();
+  } catch (ex) { toast(ex.message, "err"); }
+  finally { btn.disabled = false; }
 }
 
 async function testServer(name, btn) {
@@ -225,6 +281,12 @@ function serverModal(name, copying = false) {
       <label>主机 *<input id="m-host" value="${esc(s?.host || "")}" placeholder="IP 或域名"></label>
       <label>端口<input id="m-port" type="number" value="${s?.port || 22}"></label>
       <label>用户名 *<input id="m-user" value="${esc(s?.username || "")}"></label>
+      <label>分组<input id="m-group" list="server-groups" value="${esc(s?.group || "")}" placeholder="留空为未分组，如生产环境"></label>
+      <datalist id="server-groups">${[...new Set((state.servers || []).map((x) => x.group).filter(Boolean))].map((g) => `<option value="${esc(g)}"></option>`).join("")}</datalist>
+      <label>状态<select id="m-disabled">
+        <option value="false" ${!s?.disabled ? "selected" : ""}>启用（AI 可访问）</option>
+        <option value="true" ${s?.disabled ? "selected" : ""}>停用（AI 不可见）</option>
+      </select></label>
       <label class="full">认证方式
         <select id="m-authtype">
           <option value="password" ${s?.auth.type === "password" ? "selected" : ""}>密码</option>
@@ -288,6 +350,8 @@ function serverModal(name, copying = false) {
       host: $("#m-host").value.trim(),
       port: parseInt($("#m-port").value) || 22,
       username: $("#m-user").value.trim(),
+      group: $("#m-group").value.trim(),
+      disabled: $("#m-disabled").value === "true",
       auth: { type: t },
       jump_via: $("#m-jump").value || null,
       proxy: proxyType
@@ -489,6 +553,41 @@ $("#btn-import").addEventListener("click", async () => {
 });
 
 // ---------------- 设置 ----------------
+function showAddressPrivacy(hideIP) {
+  $("#hide-ip-toggle").checked = hideIP;
+  $("#hide-ip-status").textContent = hideIP ? "已隐藏 · MCP 列表仅显示 ******" : "已允许 · MCP 列表可读取真实地址";
+}
+
+async function loadSettings() {
+  const toggle = $("#hide-ip-toggle");
+  toggle.disabled = true;
+  $("#hide-ip-status").textContent = "正在读取设置…";
+  try {
+    const settings = await api("/api/settings");
+    showAddressPrivacy(settings.hide_ip);
+    toggle.disabled = false;
+  } catch (ex) {
+    $("#hide-ip-status").textContent = "读取设置失败，请重新进入设置页面重试。";
+    toast(ex.message, "err");
+  }
+}
+
+$("#hide-ip-toggle").addEventListener("change", async (event) => {
+  const toggle = event.target;
+  const hideIP = toggle.checked;
+  toggle.disabled = true;
+  $("#hide-ip-status").textContent = "正在保存…";
+  try {
+    const settings = await api("/api/settings", { method: "PUT", body: { hide_ip: hideIP } });
+    showAddressPrivacy(settings.hide_ip);
+    toggle.disabled = false;
+    toast(settings.hide_ip ? "已隐藏 MCP 列表中的地址" : "已允许 MCP 读取真实地址");
+  } catch (ex) {
+    toast(ex.message, "err");
+    await loadSettings();
+  }
+});
+
 $("#btn-change-pw").addEventListener("click", async () => {
   const old = $("#pw-old").value, n1 = $("#pw-new").value, n2 = $("#pw-new2").value;
   if (!old) return toast("请输入当前主密码", "err");
@@ -525,15 +624,34 @@ $("#btn-forgot").addEventListener("click", async () => {
 });
 
 // ---------------- modal ----------------
+let modalOpener = null;
 function openModal(html) {
+  modalOpener = document.activeElement;
   $("#modal-card").innerHTML = html;
+  $("#modal-card h2").id = "modal-title";
   $("#modal").classList.remove("hidden");
+  $("#app").inert = true;
+  document.body.classList.add("modal-open");
+  $("#modal-card").focus();
 }
 function closeModal() {
   $("#modal").classList.add("hidden");
+  $("#app").inert = false;
+  document.body.classList.remove("modal-open");
+  if (modalOpener?.isConnected) modalOpener.focus();
+  modalOpener = null;
 }
-$("#modal").addEventListener("click", (e) => {
-  if (e.target === $("#modal")) closeModal();
+$("#modal").addEventListener("keydown", (e) => {
+  if (e.key !== "Tab") return;
+  const focusable = $$("#modal-card input, #modal-card select, #modal-card textarea, #modal-card button")
+    .filter((el) => !el.disabled && el.getClientRects().length);
+  const first = focusable[0], last = focusable[focusable.length - 1];
+  if (!first) { e.preventDefault(); return; }
+  if (e.shiftKey && (document.activeElement === first || document.activeElement === $("#modal-card"))) {
+    e.preventDefault(); last.focus();
+  } else if (!e.shiftKey && (document.activeElement === last || document.activeElement === $("#modal-card"))) {
+    e.preventDefault(); first.focus();
+  }
 });
 
 // ---------------- 启动 ----------------

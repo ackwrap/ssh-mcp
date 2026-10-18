@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ackwrap/ssh-mcp/internal/mcpserver"
+	"github.com/ackwrap/ssh-mcp/internal/web"
 	"github.com/getlantern/systray"
-	"github.com/ssh-mcp/ssh-mcp-go/internal/mcpserver"
-	"github.com/ssh-mcp/ssh-mcp-go/internal/web"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )

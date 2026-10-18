@@ -7,7 +7,7 @@
 #endif
 #define MyAppPublisher "SSH-MCP contributors"
 #define MyAppExeName "ssh-mcp.exe"
-#define MyAppURL "https://github.com/ssh-mcp/ssh-mcp-go"
+#define MyAppURL "https://github.com/ackwrap/ssh-mcp"
 
 [Setup]
 AppId={{8E2F3C1A-5D4B-4E6F-9A8B-1C2D3E4F5A6B}

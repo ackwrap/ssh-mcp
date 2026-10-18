@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ssh-mcp/ssh-mcp-go/internal/integration"
+	"github.com/ackwrap/ssh-mcp/internal/integration"
 )
 
 func newIntegrationManager() (*integration.Manager, error) {

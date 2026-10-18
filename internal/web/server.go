@@ -18,12 +18,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ackwrap/ssh-mcp/internal/config"
+	"github.com/ackwrap/ssh-mcp/internal/integration"
+	"github.com/ackwrap/ssh-mcp/internal/mcpserver"
+	"github.com/ackwrap/ssh-mcp/internal/secure"
+	"github.com/ackwrap/ssh-mcp/internal/sshclient"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/ssh-mcp/ssh-mcp-go/internal/config"
-	"github.com/ssh-mcp/ssh-mcp-go/internal/integration"
-	"github.com/ssh-mcp/ssh-mcp-go/internal/mcpserver"
-	"github.com/ssh-mcp/ssh-mcp-go/internal/secure"
-	"github.com/ssh-mcp/ssh-mcp-go/internal/sshclient"
 )
 
 const (
@@ -83,6 +83,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/auth/lock", s.handle(s.authLogout))
 	s.mux.HandleFunc("POST /api/auth/change_password", s.handle(s.authChangePassword))
 	s.mux.HandleFunc("POST /api/auth/forgot", s.handle(s.authForgot))
+	s.mux.HandleFunc("GET /api/settings", s.handle(s.getSettings))
+	s.mux.HandleFunc("PUT /api/settings", s.handle(s.updateSettings))
 
 	s.mux.HandleFunc("GET /api/servers", s.handle(s.listServers))
 	s.mux.HandleFunc("POST /api/servers", s.handle(s.addServer))
@@ -420,6 +422,35 @@ func (s *Server) authForgot(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	return nil
+}
+
+func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) error {
+	opened, err := s.unlock(r)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"hide_ip": !opened.Config.Settings.AllowMCPAddresses})
+	return nil
+}
+
+func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) error {
+	opened, err := s.unlock(r)
+	if err != nil {
+		return err
+	}
+	var input map[string]any
+	if err := decodeJSON(r, &input); err != nil {
+		return err
+	}
+	hideIP, ok := input["hide_ip"].(bool)
+	if !ok || len(input) != 1 {
+		return errors.New("设置仅接受布尔值 hide_ip")
+	}
+	if err := opened.SetSettings(config.Settings{AllowMCPAddresses: !hideIP}); err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"hide_ip": hideIP})
 	return nil
 }
 

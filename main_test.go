@@ -2,8 +2,14 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestCLIFlags(t *testing.T) {
@@ -19,6 +25,38 @@ func TestCLIFlags(t *testing.T) {
 	if !strings.Contains(stderr.String(), "不能") {
 		t.Fatalf("stderr=%q", stderr.String())
 	}
+}
+
+func TestStdioMCP(t *testing.T) {
+	t.Setenv("LOCALAPPDATA", t.TempDir())
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, executable, "-test.run=^TestStdioMCPHelper$")
+	command.Env = append(os.Environ(), "SSH_MCP_TEST_STDIO=1")
+	client := mcp.NewClient(&mcp.Implementation{Name: "stdio-test", Version: "1"}, nil)
+	session, err := client.Connect(ctx, &mcp.CommandTransport{Command: command}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	result, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Tools) != 16 {
+		t.Fatalf("tool count = %d", len(result.Tools))
+	}
+}
+
+func TestStdioMCPHelper(t *testing.T) {
+	if os.Getenv("SSH_MCP_TEST_STDIO") != "1" {
+		return
+	}
+	os.Exit(run(nil, os.Stdout, os.Stderr))
 }
 
 func TestResolveLaunchMode(t *testing.T) {

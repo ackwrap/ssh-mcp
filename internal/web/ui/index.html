@@ -40,10 +40,14 @@
     <!-- 服务器 -->
     <section id="view-servers" class="view hidden">
       <div class="view-head">
-        <h2>服务器</h2>
+        <div><h2>服务器</h2><p id="server-summary" class="hint">按分组管理连接与 AI 访问权限</p></div>
         <button class="btn primary" id="btn-add-server">+ 新增服务器</button>
       </div>
-      <div id="server-list" class="card-grid"></div>
+      <div class="server-toolbar">
+        <label class="server-filter">分组筛选<select id="server-group-filter"><option value="">全部分组</option></select></label>
+        <p class="server-toolbar-hint">停用的服务器仅在此处显示，AI 无法查看或操作。</p>
+      </div>
+      <div id="server-list" class="server-groups"></div>
     </section>
 
     <!-- 跳板机 -->
@@ -103,6 +107,15 @@
     <section id="view-settings" class="view hidden">
       <div class="view-head"><h2>设置</h2></div>
       <div class="panel">
+        <h3>MCP 地址隐私</h3>
+        <label class="setting-switch">
+          <span>隐藏 IP</span>
+          <input id="hide-ip-toggle" type="checkbox" role="switch" aria-describedby="hide-ip-help" checked disabled>
+        </label>
+        <p id="hide-ip-help" class="hint">默认开启。手动关闭后，MCP 列表才能读取服务器、跳板机和代理的真实 IP 或域名。</p>
+        <p id="hide-ip-status" class="hint" role="status">正在读取设置…</p>
+      </div>
+      <div class="panel">
         <h3>修改主密码</h3>
         <div class="form-grid">
           <label>当前主密码<input type="password" id="pw-old"></label>
@@ -133,7 +146,7 @@
 </div>
 
 <div id="modal" class="overlay hidden">
-  <div class="modal-card" id="modal-card"></div>
+  <div class="modal-card" id="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1"></div>
 </div>
 
 <div id="toast" class="hidden"></div>

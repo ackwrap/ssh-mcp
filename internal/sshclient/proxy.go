@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ssh-mcp/ssh-mcp-go/internal/config"
+	"github.com/ackwrap/ssh-mcp/internal/config"
 	"golang.org/x/net/idna"
 )
 

@@ -42,6 +42,8 @@
 | `internal/web/ui` | 从 Python 项目复用的 WebUI |
 | `internal/tray` | Windows 托盘、单实例和开机自启 |
 | `build.ps1` | 测试并构建 Windows 应用及 Inno Setup 安装包 |
+| `build.sh` | 测试并构建 macOS 通用 `.pkg`、Linux 本机架构 `.deb` |
+| `.github/workflows/build.yml` | 三平台 CI、构建产物及标签 Release 发布 |
 | `installer.iss` | 安装目录、快捷方式、开机自启和卸载策略 |
 | `USAGE.md` | 面向用户的完整使用说明 |
 
@@ -251,3 +253,6 @@ go mod verify
 - 安装器使用当前用户权限安装到 `{localappdata}\Programs\SSH-MCP`。
 - 卸载时不得默认删除 `%LOCALAPPDATA%\ssh_mcp`，避免用户配置丢失。
 - 安装包版本必须从构建后的 `ssh-mcp.exe --version` 获取，不能与应用版本不一致。
+- macOS/Linux 使用 `bash ./build.sh` 本地打包；版本同样从构建后的程序获取。macOS 为 amd64/arm64 通用 `.pkg`，Linux 为本机架构 `.deb`。
+- macOS/Linux 的 `--tray` / `--open` 运行前台 WebUI/HTTP MCP，不宣称具备 Windows 原生托盘或自动启动功能；必须继续只监听 `127.0.0.1`。
+- GitHub Actions 分支/PR/手动运行只构建，推送与应用版本一致的 `v<版本>` 标签才发布 Release；不得给普通构建任务授予写权限。

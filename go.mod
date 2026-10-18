@@ -1,4 +1,4 @@
-module github.com/ssh-mcp/ssh-mcp-go
+module github.com/ackwrap/ssh-mcp
 
 go 1.25.0
 

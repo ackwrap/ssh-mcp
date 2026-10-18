@@ -26,7 +26,7 @@ macOS：双击 `SSH-MCP-Setup-<版本>-macos-universal.pkg` 安装，程序位�
 Debian/Ubuntu：
 
 ```bash
-sudo dpkg -i ./SSH-MCP-Setup-0.1.3-linux-amd64.deb
+sudo dpkg -i ./SSH-MCP-Setup-0.1.4-linux-amd64.deb
 ```
 
 程序位于 `/usr/bin/ssh-mcp`。两平台安装后都在终端运行：
@@ -47,7 +47,7 @@ ssh-mcp --open
 推荐使用安装包：
 
 ```text
-dist\installer\SSH-MCP-Setup-0.1.3.exe
+dist\installer\SSH-MCP-Setup-0.1.4.exe
 ```
 
 运行安装包后，可以选择创建桌面快捷方式和登录 Windows 时自动启动托盘。开始菜单、桌面快捷方式及安装完成页都会使用 `ssh-mcp.exe --open`，因此启动应用时会同时打开 WebUI。
@@ -70,7 +70,7 @@ dist\ssh-mcp.exe
 
 ```text
 dist\ssh-mcp.exe
-dist\installer\SSH-MCP-Setup-0.1.3.exe
+dist\installer\SSH-MCP-Setup-0.1.4.exe
 ```
 
 仅构建免安装程序：
@@ -88,7 +88,7 @@ dist\installer\SSH-MCP-Setup-0.1.3.exe
 预期输出：
 
 ```text
-ssh-mcp 0.1.3
+ssh-mcp 0.1.4
 ```
 
 ## 3. 启动方式
@@ -360,7 +360,7 @@ http://127.0.0.1:8877/mcp/
 | `ssh_list_dir` | 列出远程目录 |
 | `ssh_stat` | 获取远程文件属性 |
 
-`ssh_upload` 以流式方式读取本地文件，使用 SFTP 默认 32 KB 数据包和 64 路并发请求流水线，避免每个数据包都串行等待网络往返；不会把整个大文件加载到内存。批量上传时，每次调用都会复用可用的 SSH 连接。上传失败仍会返回错误，并尽力截断到首个失败数据包之前，可能留下不完整文件，需要重新上传。
+`ssh_upload` 使用每文件 1 MiB（1,048,576 字节）的本地读缓存流式读取文件，减少磁盘读取次数；SFTP 协议仍使用兼容性较好的 32 KiB 数据包和 64 路并发请求流水线，避免逐包串行等待网络往返。读缓存大小不等于 SFTP 单包大小，不会把整个大文件加载到内存。批量上传时，每次调用都会复用可用的 SSH 连接。上传失败仍会返回错误，并尽力截断到首个失败数据包之前，可能留下不完整文件，需要重新上传。
 
 命令单条输出上限为 4 MB。`ssh_read_file` 和 `ssh_write_file` 的文本内容硬上限为 4 MB，`ssh_read_file` 默认读取上限为 1 MB；该限制不适用于流式 `ssh_upload` / `ssh_download`。
 

@@ -20,7 +20,7 @@
 - **本地管理**：WebUI 支持主密码登录、锁定、改密、导入导出、服务器分组与启用/停用管理。
 - **凭据保护**：配置使用 Fernet 加密，采用 PBKDF2-HMAC-SHA256 派生密钥；通过文件锁、revision 校验和原子写入保护配置更新。
 - **客户端接入**：内置 OpenCode、Claude Code、Codex、Kimi Code、ZCode、Cursor、VS Code 和 Claude Desktop 的检测与接入适配器。
-- **传输与运行方式**：支持 stdio 和 Streamable HTTP MCP；SSH 连接复用，大文件上传使用有界流水线写入。
+- **传输与运行方式**：支持 stdio 和 Streamable HTTP MCP；SSH 连接复用，上传使用每文件 1 MiB 本地读缓存和有界流水线写入，保留兼容的 32 KiB SFTP 分包。
 
 自动接入的可用性取决于客户端的安装方式和平台。操作前请检查 WebUI 展示的工具与配置路径；接入或取消接入前会备份需要修改的配置文件。
 
@@ -37,7 +37,7 @@
 Linux 安装示例（将文件名替换为下载的版本）：
 
 ```bash
-sudo dpkg -i ./SSH-MCP-Setup-0.1.3-linux-amd64.deb
+sudo dpkg -i ./SSH-MCP-Setup-0.1.4-linux-amd64.deb
 ```
 
 **平台差异：** Windows 提供原生托盘、单实例管理和可选开机自启。macOS/Linux 不提供原生托盘或自动启动服务，管理服务在终端前台运行，按 Ctrl+C 退出。三个平台均支持 stdio、WebUI 和 Streamable HTTP MCP。
@@ -180,11 +180,11 @@ go mod verify
 - **版本校验**：标签必须与 `internal/mcpserver/server.go` 的版本一致，安装包版本从构建后的程序读取。
 - **权限边界**：普通构建只使用仓库读取权限，只有发布任务拥有 `contents: write`。
 
-例如，提交并推送版本 `0.1.3` 的代码后：
+例如，提交并推送版本 `0.1.4` 的代码后：
 
 ```bash
-git tag -a v0.1.3 -m "Release v0.1.3"
-git push origin v0.1.3
+git tag -a v0.1.4 -m "Release v0.1.4"
+git push origin v0.1.4
 ```
 
 ## 文档与反馈

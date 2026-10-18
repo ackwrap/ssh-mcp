@@ -1,6 +1,7 @@
 package sshclient
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
@@ -29,6 +30,7 @@ const (
 	PoolTTL          = 5 * time.Minute
 	MaxCommandOutput = 4 * 1024 * 1024
 	MaxFileBytes     = 4 * 1024 * 1024
+	UploadBufferSize = 1024 * 1024
 )
 
 var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
@@ -523,9 +525,11 @@ func (m *Manager) Upload(server *config.Server, localPath, remotePath string) (m
 	if err != nil {
 		return nil, &Error{Message: "上传失败: " + err.Error()}
 	}
-	// Explicitly pipeline writes using the client's bounded concurrency (64 by
-	// default). io.Copy uses sequential writes with the default SFTP options.
-	_, copyErr := target.ReadFromWithConcurrency(source, 0)
+	// Coalesce local file reads into a 1 MiB buffer without changing the SFTP
+	// packet size (32 KiB) required for broad server compatibility. Keep the
+	// explicit bounded pipeline (64 requests by default) for buffered readers.
+	reader := bufio.NewReaderSize(source, UploadBufferSize)
+	_, copyErr := target.ReadFromWithConcurrency(reader, 0)
 	if copyErr != nil {
 		// Later packets may have succeeded beyond the first failed write. Keep
 		// only the acknowledged prefix instead of leaving holes in the file.

@@ -32,7 +32,11 @@ func newUploadTestManager(t testing.TB, handlers ...sftp.Handlers) (*Manager, *c
 
 func TestUploadSizesAndDownload(t *testing.T) {
 	manager, server := newUploadTestManager(t)
-	for _, size := range []int{0, 123, 32 * 1024, 32*1024 + 17, 8*1024*1024 + 123} {
+	for _, size := range []int{
+		0, 123, 32 * 1024, 32*1024 + 17,
+		UploadBufferSize - 1, UploadBufferSize, UploadBufferSize + 17,
+		8*1024*1024 + 123,
+	} {
 		t.Run(fmt.Sprint(size), func(t *testing.T) {
 			dir := t.TempDir()
 			local, remote := filepath.Join(dir, "source.bin"), filepath.Join(dir, "remote.bin")
@@ -136,6 +140,41 @@ func TestUploadPipelinesWrites(t *testing.T) {
 	content, err := manager.ReadFile(server, "/upload.bin", MaxFileBytes)
 	if err != nil || content != string(data) {
 		t.Fatalf("uploaded content mismatch: %v", err)
+	}
+}
+
+func TestUploadKeepsCompatiblePackets(t *testing.T) {
+	const maxPacketSize = 32 * 1024
+	var mu sync.Mutex
+	largestPacket := 0
+	handlers := uploadTestHandlers(func(writer io.WriterAt, p []byte, off int64) (int, error) {
+		if len(p) > maxPacketSize {
+			return 0, fmt.Errorf("SFTP write is too large: %d bytes", len(p))
+		}
+		mu.Lock()
+		largestPacket = max(largestPacket, len(p))
+		mu.Unlock()
+		return writer.WriteAt(p, off)
+	})
+	manager, server := newUploadTestManager(t, handlers)
+	local := filepath.Join(t.TempDir(), "source.bin")
+	data := bytes.Repeat([]byte("x"), 2*UploadBufferSize+17)
+	if err := os.WriteFile(local, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := manager.Upload(server, local, "/upload.bin")
+	if err != nil || result["size"] != int64(len(data)) {
+		t.Fatalf("upload result=%#v err=%v", result, err)
+	}
+	mu.Lock()
+	observed := largestPacket
+	mu.Unlock()
+	if observed != maxPacketSize {
+		t.Fatalf("largest SFTP write = %d, want %d", observed, maxPacketSize)
+	}
+	content, err := manager.ReadFile(server, "/upload.bin", MaxFileBytes)
+	if err != nil || content != string(data) {
+		t.Fatalf("uploaded content mismatch across buffer boundaries: %v", err)
 	}
 }
 

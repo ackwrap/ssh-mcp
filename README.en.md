@@ -20,7 +20,7 @@ Manage connections and credentials through a local WebUI, then use your MCP clie
 - **Local management**: A WebUI for master-password authentication, locking, password changes, imports and exports, server groups, and enable/disable controls.
 - **Credential protection**: Fernet-encrypted configuration with PBKDF2-HMAC-SHA256 key derivation. File locks, revision checks, and atomic writes protect configuration updates.
 - **Client integrations**: Built-in detection and configuration adapters for OpenCode, Claude Code, Codex, Kimi Code, ZCode, Cursor, VS Code, and Claude Desktop.
-- **Transfers and transports**: stdio and Streamable HTTP MCP, SSH connection reuse, and bounded pipelined writes for large uploads.
+- **Transfers and transports**: stdio and Streamable HTTP MCP, SSH connection reuse, and a 1 MiB local read buffer per upload with bounded pipelined writes, retaining compatible 32 KiB SFTP packets.
 
 Automatic integration availability depends on the client installation and platform. Review the detected tools and configuration paths in the WebUI before making changes. Configuration files are backed up before integration setup or removal modifies them.
 
@@ -37,7 +37,7 @@ Download the appropriate installer from [GitHub Releases](https://github.com/ack
 Linux installation example; replace the filename with the version you downloaded:
 
 ```bash
-sudo dpkg -i ./SSH-MCP-Setup-0.1.3-linux-amd64.deb
+sudo dpkg -i ./SSH-MCP-Setup-0.1.4-linux-amd64.deb
 ```
 
 **Platform differences:** Windows provides a native system tray, single-instance management, and optional startup at login. macOS/Linux do not provide a native tray or install an automatic startup service; the management service runs in the foreground until you press Ctrl+C. All three platforms support stdio, the WebUI, and Streamable HTTP MCP.
@@ -180,11 +180,11 @@ The [build workflow](.github/workflows/build.yml) tests and packages the applica
 - **Version validation** requires the tag to match `internal/mcpserver/server.go`. Installer versions are read from the built application.
 - **Permissions** are read-only for regular builds. Only the release job receives `contents: write`.
 
-For example, after committing and pushing the source for version `0.1.3`:
+For example, after committing and pushing the source for version `0.1.4`:
 
 ```bash
-git tag -a v0.1.3 -m "Release v0.1.3"
-git push origin v0.1.3
+git tag -a v0.1.4 -m "Release v0.1.4"
+git push origin v0.1.4
 ```
 
 ## Documentation and support

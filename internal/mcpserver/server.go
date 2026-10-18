@@ -17,7 +17,7 @@ import (
 
 const (
 	Name       = "ssh-mcp"
-	Version    = "0.1.3"
+	Version    = "0.1.4"
 	MaxTimeout = 600
 )
 
